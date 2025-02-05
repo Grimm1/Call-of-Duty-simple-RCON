@@ -61,9 +61,15 @@ function parseSRAText($content)
             $rotation[] = $line;
         }
 
-        if (!empty($rotation) && $currentSection) {
+        // Here we ensure that even if there's no rotation data, we still add the section if a name was found
+        if ($currentSection && empty($data['rotations'][$currentSection])) {
             $data['rotations'][$currentSection] = $rotation;
         }
+    }
+
+    // If there were no rotations found, we should initialize an empty array instead of leaving it undefined
+    if (!isset($data['rotations'])) {
+        $data['rotations'] = [];
     }
 
     return $data;
@@ -235,7 +241,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             updateMaps($serverId, $parsedData['maps'] ?? []);
 
             // Update rotations
-            if (isset($parsedData['rotations'])) {
+            if (isset($parsedData['rotations']) && !empty($parsedData['rotations'])) {
                 updateServerMapRotations($serverId, $parsedData['rotations']);
             } else {
                 // If there are no rotations, clear existing ones for this server
@@ -336,8 +342,8 @@ ob_end_flush();
                 ?>
             </div>
             <footer>
-        <?php include 'footer.php'; ?>
-    </footer>
+                <?php include 'footer.php'; ?>
+            </footer>
     </div>
 
     </main>
@@ -470,95 +476,106 @@ ob_end_flush();
                     var serverId = $('#server').val();
 
                     reader.onload = function(e) {
-                        var content = e.target.result;
-                        var serverId = $('#server').val();
+    var content = e.target.result;
+    var serverId = $('#server').val();
 
-                        // Extract server type from content
-                        var fileServerTypeMatch = content.match(/^server_type\s*=\s*([a-zA-Z0-9_]+)/);
-                        var fileServerType = fileServerTypeMatch ? fileServerTypeMatch[1] : null;
+    // Extract server type from content
+    var fileServerTypeMatch = content.match(/^server_type\s*=\s*([a-zA-Z0-9_]+)/);
+    var fileServerType = fileServerTypeMatch ? fileServerTypeMatch[1] : null;
 
-                        if (fileServerType) {
-                            $.ajax({
-                                type: 'POST',
-                                url: '<?php echo htmlspecialchars($_SERVER["PHP_SELF"]); ?>',
-                                data: {
-                                    'get_server_type': true,
-                                    'server': serverId
-                                },
-                                success: function(serverTypeFromDB) {
-                                    serverTypeFromDB = serverTypeFromDB.trim();
-                                    if (serverTypeFromDB === fileServerType) {
-                                        var contentWithoutServerType = content.replace(/^server_type\s*=.*\n/, '').trim();
+    if (fileServerType) {
+        $.ajax({
+            type: 'POST',
+            url: '<?php echo htmlspecialchars($_SERVER["PHP_SELF"]); ?>',
+            data: {
+                'get_server_type': true,
+                'server': serverId
+            },
+            success: function(serverTypeFromDB) {
+                serverTypeFromDB = serverTypeFromDB.trim();
+                if (serverTypeFromDB === fileServerType) {
+                    var contentWithoutServerType = content.replace(/^server_type\s*=.*\n/, '').trim();
 
-                                        // Validate the rest of the content format
-                                        var parts = contentWithoutServerType.split("\n\n# Map Rotations:\n");
-                                        if (parts.length === 2) {
-                                            var mapData = parts[0].trim();
-                                            var rotationData = parts[1].trim();
+                    // Split content into map data and rotation data
+                    var parts = contentWithoutServerType.split("\n\n# Map Rotations:\n");
+                    if (parts.length >= 1) {
+                        var mapData = parts[0].trim();
+                        var rotationData = parts[1] ? parts[1].trim() : ''; // Handle case where rotation might not exist
 
-                                            // Check map data format
-                                            var mapLines = mapData.split("\n").filter(Boolean);
-                                            var allMapsValid = mapLines.every(line => {
-                                                return line.split(';').every(pair => /^[a-zA-Z0-9_]+=[a-zA-Z0-9_ :\s,.-]+$/.test(pair.trim()));
-                                            });
+                        // Check map data format
+                        var mapLines = mapData.split("\n").filter(Boolean);
+                        var allMapsValid = mapLines.every(line => {
+                            // Only check lines that match the map data format
+                            if (line.startsWith('#')) {
+                                return true; // Skip comments or headers like # Map Rotations:
+                            }
+                            return line.split(';').every(pair => /^[a-zA-Z0-9_]+=[a-zA-Z0-9_ :\s,.-]+$/.test(pair.trim()));
+                        });
 
-                                            // Check rotation data format
-                                            var rotations = rotationData.split("\n# Rotation:");
-                                            var isValidRotation = rotations.every(rotation => {
-                                                var rotationParts = rotation.split("\n").filter(part => part.trim() !== '');
-                                                if (rotationParts.length < 2) {
-                                                    console.log('Rotation parts length less than 2:', rotationParts);
-                                                    return false;
-                                                }
-
-                                                // Check if the first line starts with "# Rotation:" followed by any name
-                                                var rotationName = rotationParts[0].trim().replace(/^# Rotation:/, '').trim();
-                                                if (rotationName.length === 0) {
-                                                    console.log('Rotation name is empty:', rotationParts[0]);
-                                                    return false;
-                                                }
-
-                                                // Check the rotation entries - now they are space-separated
-                                                var rotationString = rotationParts[1].trim();
-                                                // Split by 'gametype' to handle concatenated entries
-                                                var rotationEntries = rotationString.split(/\s*(?:gametype)\s*/).filter(Boolean);
-
-                                                var regex = /^(\w+)\s+map\s+(\w+)$/;
-                                                var allEntriesValid = rotationEntries.every(entry => {
-                                                    //console.log('Rotation Entry:', entry);
-                                                    var match = entry.match(regex);
-                                                    return match !== null && match[1] && match[2]; // Ensure gametype and map name are present
-                                                });
-                                                //console.log('All Rotation Entries Valid:', allEntriesValid);
-                                                return allEntriesValid;
-                                            });
-
-                                            if (allMapsValid && isValidRotation) {
-                                                $('#map_data').val(content);
-                                            } else {
-                                                if (!allMapsValid) {
-                                                    customMessage('The map data format is invalid. Each map entry should be "map_name=alias", multiple entries can be on one line separated by semicolons.');
-                                                } else if (!isValidRotation) {
-                                                    customMessage('invalid data. Rotation entries should follow the pattern "gametype game_type map map_name" ');
-                                                } else {
-                                                    customMessage('invalid data. Check both map data and rotation formats.');
-                                                }
-                                            }
-                                        } else {
-                                            customMessage('invalid data. Expected sections for map data and rotations separated by "# Map Rotations:"');
-                                        }
-                                    } else {
-                                        customMessage('invalid data. File server type is ' + fileServerType + ', but database has ' + serverTypeFromDB);
-                                    }
-                                },
-                                error: function() {
-                                    customMessage('Could not fetch server type from database. Please try again.');
+                        // Check rotation data format
+                        if (rotationData) {
+                            var rotations = rotationData.split("\n# Rotation:");
+                            var isValidRotation = rotations.every(rotation => {
+                                var rotationParts = rotation.split("\n").filter(part => part.trim() !== '');
+                                if (rotationParts.length < 2) {
+                                    console.log('Rotation parts length less than 2:', rotationParts);
+                                    return false;
                                 }
+
+                                // Check if the first line starts with "# Rotation:" followed by any name
+                                var rotationName = rotationParts[0].trim().replace(/^# Rotation:/, '').trim();
+                                if (rotationName.length === 0) {
+                                    console.log('Rotation name is empty:', rotationParts[0]);
+                                    return false;
+                                }
+
+                                // Check the rotation entries - now they are space-separated
+                                var rotationString = rotationParts[1].trim();
+                                // Split by 'gametype' to handle concatenated entries
+                                var rotationEntries = rotationString.split(/\s*(?:gametype)\s*/).filter(Boolean);
+
+                                var regex = /^(\w+)\s+map\s+(\w+)$/;
+                                var allEntriesValid = rotationEntries.every(entry => {
+                                    var match = entry.match(regex);
+                                    return match !== null && match[1] && match[2]; // Ensure gametype and map name are present
+                                });
+                                return allEntriesValid;
                             });
+
+                            if (allMapsValid && isValidRotation) {
+                                $('#map_data').val(content);
+                            } else {
+                                if (!allMapsValid) {
+                                    customMessage('The map data format is invalid. Each map entry should be "map_name=alias", multiple entries can be on one line separated by semicolons.');
+                                } else if (!isValidRotation) {
+                                    customMessage('Invalid data. Rotation entries should follow the pattern "gametype game_type map map_name" ');
+                                } else {
+                                    customMessage('Invalid data. Check both map data and rotation formats.');
+                                }
+                            }
                         } else {
-                            customMessage('Server type not found in the SRA file.');
+                            // If there's no rotation data, just validate map data
+                            if (allMapsValid) {
+                                $('#map_data').val(content);
+                            } else {
+                                customMessage('The map data format is invalid. Each map entry should be "map_name=alias", multiple entries can be on one line separated by semicolons.');
+                            }
                         }
-                    };
+                    } else {
+                        customMessage('Invalid data. Expected at least a section for map data.');
+                    }
+                } else {
+                    customMessage('Invalid data. File server type is ' + fileServerType + ', but database has ' + serverTypeFromDB);
+                }
+            },
+            error: function() {
+                customMessage('Could not fetch server type from database. Please try again.');
+            }
+        });
+    } else {
+        customMessage('Server type not found in the SRA file.');
+    }
+};
                     reader.readAsText(file);
                 }
             });
