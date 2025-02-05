@@ -34,10 +34,12 @@ This tool supports multiple server management, map rotations, user management, a
    Clone this repository to your web server's document root:
 
    ```bash
-   git clone https://github.com/Grimm1/Call-of-Duty-simple-RCON.git
+   git clone https://github.com/Grimm1/Call-of-Duty-simple-RCON.git folderWhereYouWantTheFiles
    ```
-
 2. **Run Installation Script**:
+   Change ownership of the files if needed (linux) E.G. `sudo chown -R www-data:www-data yourFolderNameHere`.
+
+3. **Run Installation Script**:
    Open your browser and navigate to `/utils/install.php` to run the installation process. This will set up the database and configure the system.
 
    Example:
@@ -46,7 +48,7 @@ This tool supports multiple server management, map rotations, user management, a
    http://your-webserver.com/utils/install.php
    ```
 
-3. **Configure RCON Settings**:
+4. **Configure RCON Settings**:
    After installation, you can configure your RCON settings for each Call of Duty server you wish to manage. This includes adding server IPs, ports, and authentication details.
 
 ---
