@@ -67,7 +67,7 @@ This project is licensed under the **GPL-3.0 License**. See the [LICENSE](LICENS
 
 ## 📄 Example Screenshots
 
-![](https://github.com/Grimm1/Call-of-Duty-simple-RCON/blob/main/img_template/Simple_Rcon.gif)
+![](https://github.com/Grimm1/Call-of-Duty-simple-RCON/blob/Main/img_template/Simple_Rcon.gif)
 
 ---
 
