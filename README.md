@@ -36,7 +36,7 @@ This tool supports multiple server management, map rotations, user management, a
    ```bash
    git clone https://github.com/Grimm1/Call-of-Duty-simple-RCON.git folderWhereYouWantTheFiles
    ```
-2. **Run Installation Script**:
+2. **Change ownership of files**:
    Change ownership of the files if needed (linux) E.G. `sudo chown -R www-data:www-data yourFolderNameHere`.
 
 3. **Run Installation Script**:
