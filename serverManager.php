@@ -1,4 +1,9 @@
 <?php
+
+error_reporting(E_ALL);
+ini_set('display_errors', 1);
+
+
 session_start();
 if (!isset($_SESSION['username'])) {
     header("Location: login.php");
@@ -120,7 +125,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
         $port = (int)$_POST['port']; // Ensure port is an integer
         $rcon_password = $_POST['rcon_password'];
         $server_type = $_POST['server_type'];
-
+    
         $sql = "UPDATE game_servers SET server_name=?, ip_or_hostname=?, port=?, rcon_password=?, server_type=? WHERE id=?";
         $stmt = $conn->prepare($sql);
         if (!$stmt) {
@@ -130,15 +135,25 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
         $stmt->bind_param("ssissi", $server_name, $ip_or_hostname, $port, $rcon_password, $server_type, $server_id);
         if ($stmt->execute()) {
             // Clear existing gametype associations for this server
-            $stmt = $conn->prepare("DELETE FROM server_gametypes WHERE server_id = ?");
-            if (!$stmt) {
+            $clear_stmt = $conn->prepare("DELETE FROM server_gametypes WHERE server_id = ?");
+            if (!$clear_stmt) {
                 $response['error'] = 'SQL preparation failed for clearing gametypes: ' . $conn->error;
                 goto end;
             }
-            $stmt->bind_param("i", $server_id);
-            $stmt->execute();
-            $stmt->close();
-
+            $clear_stmt->bind_param("i", $server_id);
+            $clear_stmt->execute();
+            $clear_stmt->close();
+    
+            // Also clear from available_gametypes for this server
+            $clear_avail_stmt = $conn->prepare("DELETE FROM available_gametypes WHERE server_id = ?");
+            if (!$clear_avail_stmt) {
+                $response['error'] = 'SQL preparation failed for clearing available gametypes: ' . $conn->error;
+                goto end;
+            }
+            $clear_avail_stmt->bind_param("i", $server_id);
+            $clear_avail_stmt->execute();
+            $clear_avail_stmt->close();
+    
             // Fetch and link new gametypes for updated server type
             $stmt = $conn->prepare("SELECT id, game_type, gamet_alias FROM default_gametypes WHERE server_type = ?");
             if (!$stmt) {
@@ -148,36 +163,20 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
             $stmt->bind_param("s", $server_type);
             $stmt->execute();
             $result = $stmt->get_result();
-
+    
             while ($row = $result->fetch_assoc()) {
-                // Check if this gametype is already in available_gametypes for this server type
-                $check_stmt = $conn->prepare("SELECT id FROM available_gametypes WHERE game_type = ? AND gamet_alias = ? AND server_id = ?");
-                if (!$check_stmt) {
-                    $response['error'] = 'SQL preparation failed for checking available gametypes: ' . $conn->error;
+                // Insert into available_gametypes without checking for existing entries
+                $insert_stmt = $conn->prepare("INSERT INTO available_gametypes (game_type, gamet_alias, server_id) VALUES (?, ?, ?)");
+                if (!$insert_stmt) {
+                    $response['error'] = 'SQL preparation failed for inserting new gametype: ' . $conn->error;
                     goto end;
                 }
-                $check_stmt->bind_param("ssi", $row['game_type'], $row['gamet_alias'], $server_id);
-                $check_stmt->execute();
-                $check_result = $check_stmt->get_result();
-
-                if ($check_result->num_rows == 0) {
-                    // Insert into available_gametypes if not present
-                    $insert_stmt = $conn->prepare("INSERT INTO available_gametypes (game_type, gamet_alias, server_id) VALUES (?, ?, ?)");
-                    if (!$insert_stmt) {
-                        $response['error'] = 'SQL preparation failed for inserting new gametype: ' . $conn->error;
-                        goto end;
-                    }
-                    $insert_stmt->bind_param("ssi", $row['game_type'], $row['gamet_alias'], $server_id);
-                    $insert_stmt->execute();
-                    $available_gametype_id = $conn->insert_id;
-                    $insert_stmt->close();
-                } else {
-                    // Use existing id if already present
-                    $available_gametype_row = $check_result->fetch_assoc();
-                    $available_gametype_id = $available_gametype_row['id'];
-                }
-
-                // Link the server to this available gametype
+                $insert_stmt->bind_param("ssi", $row['game_type'], $row['gamet_alias'], $server_id);
+                $insert_stmt->execute();
+                $available_gametype_id = $conn->insert_id;
+                $insert_stmt->close();
+    
+                // Link the server to this new available gametype
                 $link_stmt = $conn->prepare("INSERT INTO server_gametypes (server_id, available_gametype_id) VALUES (?, ?)");
                 if (!$link_stmt) {
                     $response['error'] = 'SQL preparation failed for linking gametypes: ' . $conn->error;
@@ -185,17 +184,15 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
                 }
                 $link_stmt->bind_param("ii", $server_id, $available_gametype_id);
                 $link_stmt->execute();
-
-                // Clean up statements
-                $check_stmt->close();
                 $link_stmt->close();
             }
             $stmt->close();
-
+    
             $response['message'] = 'Server updated successfully!';
         } else {
             $response['error'] = 'Error updating server: ' . $stmt->error;
         }
+    
     } else {
         $server_name = $_POST['server_name'];
         $ip_or_hostname = $_POST['ip_or_hostname'];
@@ -305,34 +302,53 @@ $game_names = [
     <script type="text/javascript" src="functions/modal.js"></script>
     <script>
         function sendForm(formId) {
-            const form = document.getElementById(formId);
-            const formData = new FormData(form);
+    const form = document.getElementById(formId);
+    const formData = new FormData(form);
 
-            fetch(form.action, {
-                    method: 'POST',
-                    body: formData
-                })
-                .then(response => response.json())
-                .then(data => {
-                    if (data.message) {
-                        displayMessage(data.message, 'success');
-                    } else if (data.error) {
-                        displayMessage(data.error, 'error');
-                    } else if (data.edit_server) {
-                        const editServer = data.edit_server;
-                        document.getElementById('update_server_id').value = editServer.id;
-                        document.querySelector('[name="server_name"]').value = editServer.server_name;
-                        document.querySelector('[name="ip_or_hostname"]').value = editServer.ip_or_hostname;
-                        document.querySelector('[name="port"]').value = editServer.port;
-                        document.querySelector('[name="rcon_password"]').value = editServer.rcon_password;
-                        document.querySelector('[name="server_type"]').value = editServer.server_type;
-                    }
-                    refreshServersTable();
-                })
-                .catch(error => {
-                    displayMessage('An error occurred: ' + error, 'error');
-                });
+    fetch(form.action, {
+        method: 'POST',
+        body: formData
+    })
+    .then(response => {
+        console.log('Response status:', response.status);
+        return response.text(); // Retrieve the raw response text
+    })
+    .then(text => {
+        console.log('Raw response:', text);
+        try {
+            // Parse the JSON response
+            const data = JSON.parse(text);
+            
+            if (data.message) {
+                displayMessage(data.message, 'success');
+            } else if (data.error) {
+                displayMessage(data.error, 'error');
+            } else if (data.edit_server) {
+                const editServer = data.edit_server;
+                // Update form fields with server data for editing
+                document.getElementById('update_server_id').value = editServer.id;
+                document.querySelector('[name="server_name"]').value = editServer.server_name;
+                document.querySelector('[name="ip_or_hostname"]').value = editServer.ip_or_hostname;
+                document.querySelector('[name="port"]').value = editServer.port;
+                document.querySelector('[name="rcon_password"]').value = editServer.rcon_password;
+                document.querySelector('[name="server_type"]').value = editServer.server_type;
+            }
+            
+            // Refresh the servers table after any operation
+            refreshServersTable();
+        } catch (e) {
+            // Log parsing errors
+            console.error('Failed to parse JSON:', e);
+            // Display a user-friendly error message with part of the raw response
+            displayMessage('Server response could not be parsed: ' + text.slice(0, 200) + '...', 'error');
         }
+    })
+    .catch(error => {
+        // Handle network or fetch errors
+        console.error('Fetch error:', error);
+        displayMessage('An error occurred: ' + error.message, 'error');
+    });
+}
 
         function refreshServersTable() {
             fetch('functions/fetch_servers.php')
