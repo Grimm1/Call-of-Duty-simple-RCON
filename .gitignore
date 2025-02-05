@@ -1,0 +1,12 @@
+config/database.php
+functions/debug_resolveHostname.log
+functions/debug.log
+utils/checkmap.php
+utils/update_db.php
+/access_log.txt
+/.vscode
+/scratchpad
+/utils/install2.php
+/functions/language_switch.php
+/langs
+/usage.pdf

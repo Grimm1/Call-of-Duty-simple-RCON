@@ -1,0 +1,5 @@
+<Files "database.php">
+    # Deny direct access from the web
+    Order Deny,Allow
+    Deny from all
+</Files>
