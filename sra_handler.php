@@ -46,11 +46,15 @@ function parseSRAText($content)
     $lines = explode("\n", trim($content));
     $currentSection = null;
     $rotation = [];
+    $gametypes = [];
 
     foreach ($lines as $line) {
         $line = trim($line);
         if (strpos($line, 'server_type =') === 0) {
             $data['server_type'] = trim(substr($line, strlen('server_type =')));
+        } elseif (strpos($line, 'gametype') === 0) { // New condition for gametypes
+            list($key, $value) = explode('=', $line, 2);
+            $gametypes[trim($key)] = trim($value);
         } elseif (strpos($line, '=') !== false) { // Map data
             list($key, $value) = explode('=', $line, 2);
             $data['maps'][trim($key)] = trim($value);
@@ -61,7 +65,6 @@ function parseSRAText($content)
             $rotation[] = $line;
         }
 
-        // Here we ensure that even if there's no rotation data, we still add the section if a name was found
         if ($currentSection && empty($data['rotations'][$currentSection])) {
             $data['rotations'][$currentSection] = $rotation;
         }
@@ -72,6 +75,7 @@ function parseSRAText($content)
         $data['rotations'] = [];
     }
 
+    $data['gametypes'] = $gametypes; // Add gametypes to the data array
     return $data;
 }
 
@@ -125,12 +129,43 @@ function sanitizeFileName($str)
     return substr($str, 0, 200); // Limiting to 200 chars to prevent too long filenames
 }
 
+function fetchGametypes($serverId)
+{
+    global $conn;
+    $query = "SELECT game_type, gamet_alias FROM available_gametypes WHERE server_id = ?";
+    $stmt = $conn->prepare($query);
+    $stmt->bind_param("i", $serverId);
+    $stmt->execute();
+    $result = $stmt->get_result();
+    $gametypes = [];
+    while ($row = $result->fetch_assoc()) {
+        $gametypes[] = "{$row['game_type']}={$row['gamet_alias']}";
+    }
+    $stmt->close();
+    return $gametypes;
+}
+
+function updateGametypes($serverId, $gametypes)
+{
+    global $conn;
+    $conn->query("DELETE FROM available_gametypes WHERE server_id = $serverId");
+    foreach ($gametypes as $game_type => $gamet_alias) {
+        $insertSql = "INSERT INTO available_gametypes (server_id, game_type, gamet_alias) VALUES (?, ?, ?)";
+        $stmt = $conn->prepare($insertSql);
+        $stmt->bind_param("iss", $serverId, $game_type, $gamet_alias);
+        $stmt->execute();
+    }
+}
+
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if (isset($_POST['get_data'])) {
         $serverId = $_POST['server'] ?? $selectedServerId;
         $serverMapData = handleServerMaps($serverId, true);
         $rotations = fetchServerMapRotations($serverId);
+        $gametypes = fetchGametypes($serverId); // Fetch gametypes for the server
+
         $serverMapData .= "\n\n# Map Rotations:\n" . implode("\n", $rotations);
+        $serverMapData .= "\n\n# Gametypes:\n" . implode("\n", $gametypes); // Add gametype data
 
         $server_type = fetchServerType($serverId);
         $serverMapData = "server_type = " . $server_type . "\n" . $serverMapData;
@@ -149,21 +184,34 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         // Remove server_type before updating
         $mapData = preg_replace('/^server_type\s*=.*\n?/', '', $mapData);
 
-        // Split data into map data and rotation data
+        // Split data into map data, rotation data, and gametype data
         $parts = explode("\n\n# Map Rotations:\n", $mapData);
         $mapDataOnly = $parts[0];
         $rotationData = isset($parts[1]) ? $parts[1] : '';
+
+        $rotationParts = explode("\n\n# Gametypes:\n", $rotationData);
+        $rotationDataOnly = $rotationParts[0];
+        $gametypeData = isset($rotationParts[1]) ? $rotationParts[1] : '';
 
         // Update map data
         $success = handleServerMaps($serverId, $mapDataOnly);
 
         // Update rotations
-        $parsedRotations = parseSRAText($rotationData);
+        $parsedRotations = parseSRAText($rotationDataOnly);
         if (isset($parsedRotations['rotations'])) {
             updateServerMapRotations($serverId, $parsedRotations['rotations']);
         } else {
             // If no rotations are found, clear existing ones for this server
             $conn->query("DELETE FROM server_map_rotation WHERE server_id = $serverId");
+        }
+
+        // Update gametypes
+        $parsedGametypes = parseSRAText($gametypeData);
+        if (isset($parsedGametypes['gametypes'])) {
+            updateGametypes($serverId, $parsedGametypes['gametypes']);
+        } else {
+            // If no gametypes are found, clear existing ones for this server
+            $conn->query("DELETE FROM available_gametypes WHERE server_id = $serverId");
         }
 
         if (!$success) {
@@ -191,39 +239,49 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $stmt->bind_result($server_name);
         $stmt->fetch();
         $stmt->close();
-
+    
         $serverMapData = htmlspecialchars_decode($_POST['map_data']);
-
+    
         // Adjust the format of rotation data
         $parts = explode("\n\n# Map Rotations:\n", $serverMapData);
         $mapData = $parts[0];
         $rotationData = isset($parts[1]) ? $parts[1] : '';
-
+    
         // Parse and reformat rotation data
         $reformattedRotations = '';
         $rotations = explode("\n# Rotation:", $rotationData);
         foreach ($rotations as $rotation) {
             $rotation = trim($rotation);
             if (empty($rotation)) continue; // Skip if empty
-
+    
             // Split the rotation into name and entries
             $lines = explode("\n", $rotation);
             $rotationName = trim($lines[0]);
             $rotationEntries = array_slice($lines, 1);
-
+    
             // Ensure we only have one # Rotation: prefix
             $rotationName = preg_replace('/^# Rotation:/', '', $rotationName, 1);
-
-            // Join rotation entries without semicolons
-            $rotationEntriesString = implode(' ', array_map('trim', $rotationEntries));
-
+    
+            // Join rotation entries without semicolons, filter out any comments or additional data
+            $rotationEntriesString = implode(' ', array_map(function($entry) {
+                // Remove comments and any data after '#', trim whitespace
+                return trim(preg_replace('/\s+#.*$/', '', $entry));
+            }, $rotationEntries));
+    
             $reformattedRotations .= "# Rotation: " . $rotationName . "\n";
             $reformattedRotations .= $rotationEntriesString . "\n";
         }
-
+    
         // Combine map data and reformatted rotation data
         $serverMapData = $mapData . "\n\n# Map Rotations:\n" . $reformattedRotations;
-
+    
+        // Extract and remove any existing gametype definitions from rotation data
+        $serverMapData = preg_replace('/\s+# Gametypes:.*$/m', '', $serverMapData);
+    
+        // Add Gametype Information
+        $gametypes = fetchGametypes($_POST['server']);
+        $serverMapData .= "\n\n# Gametypes:\n" . implode("\n", $gametypes);
+    
         $filename = sanitizeFileName($server_name) . '.sra';
         header('Content-Type: text/plain');
         header('Content-Disposition: attachment; filename="' . $filename . '"');
@@ -246,6 +304,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             } else {
                 // If there are no rotations, clear existing ones for this server
                 $conn->query("DELETE FROM server_map_rotation WHERE server_id = $serverId");
+            }
+
+            // Update gametypes
+            if (isset($parsedData['gametypes']) && !empty($parsedData['gametypes'])) {
+                updateGametypes($serverId, $parsedData['gametypes']);
+            } else {
+                // If no gametypes are found, clear existing ones for this server
+                $conn->query("DELETE FROM available_gametypes WHERE server_id = $serverId");
             }
 
             $_SESSION['message'] = 'Data imported successfully!';
@@ -277,6 +343,7 @@ function fetchServerMapRotations($serverId)
 
 ob_end_flush();
 ?>
+
 
 <!DOCTYPE html>
 <html lang="en">
@@ -314,7 +381,7 @@ ob_end_flush();
                         </select>
 
                     </div>
-                    <p>The sra file contains map lists and rotations for the server. Verify before actions.</p>
+                    <p>The sra file contains map lists, game types and rotations for the server. Verify data before completing any actions.</p>
                     <div class="button-group">
                         <button type="submit" name="get_data">Get Data</button>
                         <button type="button" id="clear_data">Clear Data</button>
@@ -384,7 +451,7 @@ ob_end_flush();
                     success: function(response) {
                         var data = JSON.parse(response);
                         if (data.success) {
-                            $('#map_data').val(data.map_data);
+                            $('#map_data').val(data.map_data); // This will now include gametypes
                         } else {
                             customMessage('Error fetching data: ' + data.error);
                         }
@@ -474,112 +541,147 @@ ob_end_flush();
                 } else {
                     var reader = new FileReader();
                     var serverId = $('#server').val();
+                    console.log("Server ID selected:", serverId); // Debug log
 
                     reader.onload = function(e) {
-    var content = e.target.result;
-    var serverId = $('#server').val();
+                        var content = e.target.result;
+                        console.log("File content:", content); // Debug log
 
-    // Extract server type from content
-    var fileServerTypeMatch = content.match(/^server_type\s*=\s*([a-zA-Z0-9_]+)/);
-    var fileServerType = fileServerTypeMatch ? fileServerTypeMatch[1] : null;
+                        // Extract server type from content
+                        var fileServerTypeMatch = content.match(/^server_type\s*=\s*([a-zA-Z0-9_]+)/);
+                        var fileServerType = fileServerTypeMatch ? fileServerTypeMatch[1] : null;
+                        console.log("Server type from file:", fileServerType); // Debug log
 
-    if (fileServerType) {
-        $.ajax({
-            type: 'POST',
-            url: '<?php echo htmlspecialchars($_SERVER["PHP_SELF"]); ?>',
-            data: {
-                'get_server_type': true,
-                'server': serverId
-            },
-            success: function(serverTypeFromDB) {
-                serverTypeFromDB = serverTypeFromDB.trim();
-                if (serverTypeFromDB === fileServerType) {
-                    var contentWithoutServerType = content.replace(/^server_type\s*=.*\n/, '').trim();
+                        if (fileServerType) {
+                            $.ajax({
+                                type: 'POST',
+                                url: '<?php echo htmlspecialchars($_SERVER["PHP_SELF"]); ?>',
+                                data: {
+                                    'get_server_type': true,
+                                    'server': serverId
+                                },
+                                success: function(serverTypeFromDB) {
+                                    serverTypeFromDB = serverTypeFromDB.trim();
+                                    console.log("Server type from DB:", serverTypeFromDB); // Debug log
+                                    if (serverTypeFromDB === fileServerType) {
+                                        var contentWithoutServerType = content.replace(/^server_type\s*=.*\n/, '').trim();
 
-                    // Split content into map data and rotation data
-                    var parts = contentWithoutServerType.split("\n\n# Map Rotations:\n");
-                    if (parts.length >= 1) {
-                        var mapData = parts[0].trim();
-                        var rotationData = parts[1] ? parts[1].trim() : ''; // Handle case where rotation might not exist
+                                        // Split content into map data, rotation data, and gametype data
+                                        var parts = contentWithoutServerType.split("\n\n# Map Rotations:\n");
+                                        console.log("Parts after splitting:", parts); // Debug log
+                                        if (parts.length >= 1) {
+                                            var mapData = parts[0].trim();
+                                            var restData = parts[1] ? parts[1].trim() : ''; // Handle case where rotations might not exist
+                                            var rotationData = '';
+                                            var gametypeData = '';
 
-                        // Check map data format
-                        var mapLines = mapData.split("\n").filter(Boolean);
-                        var allMapsValid = mapLines.every(line => {
-                            // Only check lines that match the map data format
-                            if (line.startsWith('#')) {
-                                return true; // Skip comments or headers like # Map Rotations:
-                            }
-                            return line.split(';').every(pair => /^[a-zA-Z0-9_]+=[a-zA-Z0-9_ :\s,.-]+$/.test(pair.trim()));
-                        });
+                                            // If there's more than one section after Map Rotations, split again for Gametypes
+                                            if (restData.includes("# Gametypes:")) {
+                                                var subParts = restData.split("\n\n# Gametypes:\n");
+                                                rotationData = subParts[0].trim();
+                                                gametypeData = subParts[1] ? subParts[1].trim() : '';
+                                                console.log("Map Data:", mapData); // Debug log
+                                                console.log("Rotation Data:", rotationData); // Debug log
+                                                console.log("Gametype Data:", gametypeData); // Debug log
+                                            } else {
+                                                rotationData = restData; // No Gametypes section found
+                                            }
 
-                        // Check rotation data format
-                        if (rotationData) {
-                            var rotations = rotationData.split("\n# Rotation:");
-                            var isValidRotation = rotations.every(rotation => {
-                                var rotationParts = rotation.split("\n").filter(part => part.trim() !== '');
-                                if (rotationParts.length < 2) {
-                                    console.log('Rotation parts length less than 2:', rotationParts);
-                                    return false;
+                                            // Check map data format
+                                            var mapLines = mapData.split("\n").filter(Boolean);
+                                            var allMapsValid = mapLines.every(line => {
+                                                if (line.startsWith('#')) {
+                                                    return true; // Skip comments or headers
+                                                }
+                                                return line.split(';').every(pair => /^[a-zA-Z0-9_]+=[a-zA-Z0-9_ :\s,.-]+$/.test(pair.trim()));
+                                            });
+                                            console.log("Map data valid:", allMapsValid); // Debug log
+
+                                            // Check rotation data format
+                                            if (rotationData) {
+                                                var rotations = rotationData.split("\n# Rotation:");
+                                                var isValidRotation = rotations.every(rotation => {
+                                                    var rotationParts = rotation.split("\n").filter(part => part.trim() !== '');
+                                                    if (rotationParts.length < 2) {
+                                                        console.log("Rotation format invalid:", rotation); // Debug log
+                                                        return false;
+                                                    }
+                                                    var rotationName = rotationParts[0].trim().replace(/^# Rotation:/, '').trim();
+                                                    if (rotationName.length === 0) {
+                                                        console.log("Rotation name is empty:", rotationParts[0]); // Debug log
+                                                        return false;
+                                                    }
+                                                    var rotationString = rotationParts[1].trim();
+                                                    var rotationEntries = rotationString.split(/\s*(?:gametype)\s*/).filter(Boolean);
+                                                    var regex = /^(\w+)\s+map\s+(\w+)$/;
+                                                    return rotationEntries.every(entry => {
+                                                        var match = entry.match(regex);
+                                                        if (!match) {
+                                                            console.log("Invalid rotation entry:", entry); // Debug log
+                                                        }
+                                                        return match !== null && match[1] && match[2];
+                                                    });
+                                                });
+                                                console.log("Rotation data valid:", isValidRotation); // Debug log
+
+                                                if (!isValidRotation) {
+                                                    customMessage('Invalid data. Rotation entries should follow the pattern "gametype game_type map map_name"');
+                                                    console.log("Failed on rotation data check"); // Debug log
+                                                    return;
+                                                }
+                                            }
+
+                                            // Check gametype data format
+                                            if (gametypeData) {
+                                                var gametypeLines = gametypeData.split("\n").filter(Boolean);
+                                                var allGametypesValid = gametypeLines.every(line => {
+                                                    var isValid = /^[a-zA-Z0-9_]+=[a-zA-Z0-9_ ]+$/.test(line.trim());
+                                                    if (!isValid) {
+                                                        console.log("Invalid gametype line:", line); // Debug log
+                                                    }
+                                                    return isValid;
+                                                });
+                                                console.log("Gametype data valid:", allGametypesValid); // Debug log
+
+                                                if (!allGametypesValid) {
+                                                    customMessage('Invalid data. Each gametype entry should be "gametype=alias".');
+                                                    console.log("Failed on gametype data check"); // Debug log
+                                                    return;
+                                                }
+                                            }
+
+                                            // If all checks pass, update the textarea with the full content
+                                            if (allMapsValid && (rotationData === '' || isValidRotation) && (gametypeData === '' || allGametypesValid)) {
+                                                $('#map_data').val(content);
+                                                console.log("Data successfully validated and set to textarea"); // Debug log
+                                            } else {
+                                                if (!allMapsValid) {
+                                                    customMessage('The map data format is invalid. Each map entry should be "map_name=alias", multiple entries can be on one line separated by semicolons.');
+                                                    console.log("Failed on map data check"); // Debug log
+                                                }
+                                            }
+                                        } else {
+                                            customMessage('Invalid data. Expected at least a section for map data.');
+                                            console.log("Failed to split content into sections"); // Debug log
+                                        }
+                                    } else {
+                                        customMessage('Invalid data. File server type is ' + fileServerType + ', but database has ' + serverTypeFromDB);
+                                        console.log("Server type mismatch"); // Debug log
+                                    }
+                                },
+                                error: function(xhr, status, error) {
+                                    customMessage('Could not fetch server type from database. Please try again.');
+                                    console.log("Error fetching server type from DB:", error); // Debug log
                                 }
-
-                                // Check if the first line starts with "# Rotation:" followed by any name
-                                var rotationName = rotationParts[0].trim().replace(/^# Rotation:/, '').trim();
-                                if (rotationName.length === 0) {
-                                    console.log('Rotation name is empty:', rotationParts[0]);
-                                    return false;
-                                }
-
-                                // Check the rotation entries - now they are space-separated
-                                var rotationString = rotationParts[1].trim();
-                                // Split by 'gametype' to handle concatenated entries
-                                var rotationEntries = rotationString.split(/\s*(?:gametype)\s*/).filter(Boolean);
-
-                                var regex = /^(\w+)\s+map\s+(\w+)$/;
-                                var allEntriesValid = rotationEntries.every(entry => {
-                                    var match = entry.match(regex);
-                                    return match !== null && match[1] && match[2]; // Ensure gametype and map name are present
-                                });
-                                return allEntriesValid;
                             });
-
-                            if (allMapsValid && isValidRotation) {
-                                $('#map_data').val(content);
-                            } else {
-                                if (!allMapsValid) {
-                                    customMessage('The map data format is invalid. Each map entry should be "map_name=alias", multiple entries can be on one line separated by semicolons.');
-                                } else if (!isValidRotation) {
-                                    customMessage('Invalid data. Rotation entries should follow the pattern "gametype game_type map map_name" ');
-                                } else {
-                                    customMessage('Invalid data. Check both map data and rotation formats.');
-                                }
-                            }
                         } else {
-                            // If there's no rotation data, just validate map data
-                            if (allMapsValid) {
-                                $('#map_data').val(content);
-                            } else {
-                                customMessage('The map data format is invalid. Each map entry should be "map_name=alias", multiple entries can be on one line separated by semicolons.');
-                            }
+                            customMessage('Server type not found in the SRA file.');
+                            console.log("Server type not found in file"); // Debug log
                         }
-                    } else {
-                        customMessage('Invalid data. Expected at least a section for map data.');
-                    }
-                } else {
-                    customMessage('Invalid data. File server type is ' + fileServerType + ', but database has ' + serverTypeFromDB);
-                }
-            },
-            error: function() {
-                customMessage('Could not fetch server type from database. Please try again.');
-            }
-        });
-    } else {
-        customMessage('Server type not found in the SRA file.');
-    }
-};
+                    };
                     reader.readAsText(file);
                 }
             });
-
             $('#update_data').click(function(e) {
                 e.preventDefault(); // Prevent default action if it's in a form
 
