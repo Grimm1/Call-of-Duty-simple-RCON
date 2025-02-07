@@ -14,7 +14,7 @@ if (!isset($conn) || !$conn->ping()) {
 
 // Fetch user data including roles
 $users = [];
-$stmt = $conn->prepare("SELECT users.id, users.username, roles.name AS role FROM users JOIN roles ON users.role_id = roles.id WHERE users.status = 'active'");
+$stmt = $conn->prepare("SELECT users.id, users.username, roles.name AS role FROM users JOIN roles ON users.role_id = roles.id WHERE roles.name = 'minion' OR roles.name = 'admin'");
 if ($stmt) {
     $stmt->execute();
     $result = $stmt->get_result();
@@ -38,6 +38,7 @@ if ($stmt) {
 } else {
     die("Failed to prepare statement for fetching permissions.");
 }
+
 
 // Fetch roles for the dropdown
 $roles = [];
@@ -65,19 +66,19 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
             case 'get_users':
                 getUsers($conn);
                 break;
-            case 'delete_user':
+            case 'delete_user': // Existing case for deleting a user
                 deleteUser($conn, $_POST['user_id']);
                 break;
-            case 'get_role_permissions':
+            case 'get_role_permissions': // New case for fetching role permissions
                 $roleName = $_POST['role_name'];
                 $permissions = getRolePermissions($conn, $roleName);
                 echo json_encode(['success' => true, 'permissions' => $permissions]);
                 break;
             case 'add_role':
-                addRole($conn, $_POST['name'], $_POST['description'], $_POST['permissions'] ?? []);
+                addRole($conn, $_POST['name'], $_POST['description'], $_POST['permissions']);
                 break;
             case 'edit_role':
-                editRole($conn, $_POST['name'], $_POST['description'], $_POST['existing_role'], $_POST['permissions'] ?? []);
+                editRole($conn, $_POST['name'], $_POST['description'], $_POST['existing_role'], $_POST['permissions']);
                 break;
             case 'delete_role':
                 deleteRole($conn, $_POST['existing_role']);
@@ -120,6 +121,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
     exit();
 }
 
+
 function getRolePermissions($conn, $roleName)
 {
     $stmt = $conn->prepare("SELECT p.id FROM permissions p 
@@ -127,6 +129,7 @@ function getRolePermissions($conn, $roleName)
                             JOIN roles r ON rp.role_id = r.id 
                             WHERE r.name = ?");
     if ($stmt === false) {
+        // Log the error or handle it appropriately
         error_log("Failed to prepare statement: " . $conn->error);
         return []; // Return empty array or handle error differently
     }
@@ -144,28 +147,28 @@ function getRolePermissions($conn, $roleName)
     $stmt->close();
     return $permissions;
 }
-
-function addUser($conn, $username, $email, $password, $roleName)
+function addUser($conn, $username, $email, $password, $role, $permissions = [])
 {
     try {
-        // Convert role name to role_id
-        $stmt = $conn->prepare("SELECT id FROM roles WHERE name = ?");
-        $stmt->bind_param("s", $roleName);
-        $stmt->execute();
-        $result = $stmt->get_result();
-        $role = $result->fetch_assoc();
-        if (!$role) {
-            throw new Exception("Role '$roleName' not found.");
-        }
-        $role_id = $role['id'];
-
         $password = password_hash($password, PASSWORD_BCRYPT);
-        $sql = "INSERT INTO users (username, password, email, role_id) VALUES (?, ?, ?, ?)";
+        $sql = "INSERT INTO users (username, password, email, role_id) SELECT ?, ?, ?, id FROM roles WHERE name = ?";
         $stmt = $conn->prepare($sql);
         if ($stmt) {
+            // If email is not provided, use NULL for the database insertion
             $emailToUse = $email ?: NULL;
-            $stmt->bind_param("ssss", $username, $password, $emailToUse, $role_id);
+            $stmt->bind_param("ssss", $username, $password, $emailToUse, $role);
             if ($stmt->execute()) {
+                $user_id = $stmt->insert_id;
+                foreach ($permissions as $perm_id) {
+                    $insert_perm_stmt = $conn->prepare("INSERT INTO user_permissions (user_id, permission_id) VALUES (?, ?)");
+                    if ($insert_perm_stmt) {
+                        $insert_perm_stmt->bind_param("ii", $user_id, $perm_id);
+                        $insert_perm_stmt->execute();
+                        $insert_perm_stmt->close();
+                    } else {
+                        throw new Exception('Failed to prepare statement for adding user permissions.');
+                    }
+                }
                 echo json_encode(['success' => true, 'message' => 'User added successfully!']);
             } else {
                 throw new Exception('Failed to add user: ' . htmlspecialchars($stmt->error));
@@ -178,9 +181,73 @@ function addUser($conn, $username, $email, $password, $roleName)
         echo json_encode(['success' => false, 'message' => 'An error occurred: ' . $e->getMessage()]);
     }
 }
+function countAdminUsers($conn)
+{
+    $stmt = $conn->prepare("SELECT COUNT(*) as count FROM users JOIN roles ON users.role_id = roles.id WHERE roles.name = 'Admin'");
+    if ($stmt) {
+        $stmt->execute();
+        $result = $stmt->get_result();
+        $row = $result->fetch_assoc();
+        $stmt->close();
+        return $row['count'];
+    }
+    return 0;
+}
+
+function deleteUser($conn, $user_id)
+{
+    // Check if the user is an admin
+    $stmt = $conn->prepare("SELECT roles.name FROM users JOIN roles ON users.role_id = roles.id WHERE users.id = ?");
+    if ($stmt) {
+        $stmt->bind_param("i", $user_id);
+        $stmt->execute();
+        $result = $stmt->get_result();
+        $row = $result->fetch_assoc();
+        $stmt->close();
+
+        if ($row['name'] === 'Admin') {
+            // Check if this is the last admin
+            if (countAdminUsers($conn) <= 1) {
+                echo json_encode(['success' => false, 'message' => 'Cannot delete the last Admin account.']);
+                return;
+            }
+        }
+    }
+
+    $stmt = $conn->prepare("DELETE FROM users WHERE id = ?");
+    if ($stmt) {
+        $stmt->bind_param("i", $user_id);
+        if ($stmt->execute()) {
+            echo json_encode(['success' => true, 'message' => 'User deleted successfully!']);
+        } else {
+            echo json_encode(['success' => false, 'message' => 'Error deleting user: ' . htmlspecialchars($stmt->error)]);
+        }
+        $stmt->close();
+    } else {
+        echo json_encode(['success' => false, 'message' => 'Failed to prepare statement for deleting user.']);
+    }
+}
 
 function editUser($conn, $user_id, $new_username, $new_password, $new_role)
 {
+    // Check if the user is currently an admin
+    $stmt = $conn->prepare("SELECT roles.name FROM users JOIN roles ON users.role_id = roles.id WHERE users.id = ?");
+    if ($stmt) {
+        $stmt->bind_param("i", $user_id);
+        $stmt->execute();
+        $result = $stmt->get_result();
+        $row = $result->fetch_assoc();
+        $stmt->close();
+
+        if ($row['name'] === 'Admin' && $new_role !== 'Admin') {
+            // Check if this is the last admin
+            if (countAdminUsers($conn) <= 1) {
+                echo json_encode(['success' => false, 'message' => 'Cannot change the role of the last Admin account.']);
+                return;
+            }
+        }
+    }
+
     $sql = "UPDATE users SET ";
     $params = [];
     $types = "";
@@ -198,22 +265,10 @@ function editUser($conn, $user_id, $new_username, $new_password, $new_role)
         $types .= "s";
     }
 
-    // Convert role name to role_id
-    $stmt = $conn->prepare("SELECT id FROM roles WHERE name = ?");
-    $stmt->bind_param("s", $new_role);
-    $stmt->execute();
-    $result = $stmt->get_result();
-    $role = $result->fetch_assoc();
-    if (!$role) {
-        echo json_encode(['success' => false, 'message' => "Role '$new_role' not found."]);
-        return;
-    }
-    $role_id = $role['id'];
-
-    $sql .= "role_id = ? WHERE id = ?";
-    $params[] = $role_id;
+    $sql .= "role_id = (SELECT id FROM roles WHERE name = ?) WHERE id = ?";
+    $params[] = $new_role;
     $params[] = $user_id;
-    $types .= "ii";
+    $types .= "si";
 
     $stmt = $conn->prepare($sql);
     if ($stmt) {
@@ -226,26 +281,10 @@ function editUser($conn, $user_id, $new_username, $new_password, $new_role)
     }
 }
 
-function deleteUser($conn, $user_id)
-{
-    $stmt = $conn->prepare("DELETE FROM users WHERE id = ?");
-    if ($stmt) {
-        $stmt->bind_param("i", $user_id);
-        if ($stmt->execute()) {
-            echo json_encode(['success' => true, 'message' => 'User deleted successfully!']);
-        } else {
-            echo json_encode(['success' => false, 'message' => 'Error deleting user: ' . htmlspecialchars($stmt->error)]);
-        }
-        $stmt->close();
-    } else {
-        echo json_encode(['success' => false, 'message' => 'Failed to prepare statement for deleting user.']);
-    }
-}
-
 function getUsers($conn)
 {
     $users = [];
-    $stmt = $conn->prepare("SELECT users.id, users.username, roles.name AS role FROM users JOIN roles ON users.role_id = roles.id WHERE users.status = 'active'");
+    $stmt = $conn->prepare("SELECT users.id, users.username, roles.name AS role FROM users JOIN roles ON users.role_id = roles.id WHERE roles.name = 'minion' OR roles.name = 'admin'");
     if ($stmt) {
         $stmt->execute();
         $result = $stmt->get_result();
@@ -258,6 +297,7 @@ function getUsers($conn)
         echo json_encode(['success' => false, 'message' => 'Failed to prepare statement for fetching users.']);
     }
 }
+
 
 function addRole($conn, $name, $description, $permissions)
 {
@@ -277,44 +317,35 @@ function addRole($conn, $name, $description, $permissions)
         }
 
         error_log("Role '$name' does not exist, proceeding with insert");
-        $conn->begin_transaction();
-        try {
-            $stmt = $conn->prepare("INSERT INTO roles (name, description) VALUES (?, ?)");
-            if ($stmt) {
-                $stmt->bind_param("ss", $name, $description);
-                if ($stmt->execute()) {
-                    $role_id = $stmt->insert_id;
-                    error_log("Role '$name' added successfully, role_id: $role_id");
-                    foreach ($permissions as $perm_id) {
-                        $insert_stmt = $conn->prepare("INSERT INTO role_permissions (role_id, permission_id) VALUES (?, ?)");
-                        if ($insert_stmt) {
-                            $insert_stmt->bind_param("ii", $role_id, $perm_id);
-                            if ($insert_stmt->execute()) {
-                                error_log("Permission '$perm_id' added for role '$name'");
-                            } else {
-                                error_log("Failed to add permission '$perm_id' for role '$name': " . htmlspecialchars($insert_stmt->error));
-                                throw new Exception('Failed to add permissions: ' . htmlspecialchars($insert_stmt->error));
-                            }
-                            $insert_stmt->close();
-                        } else {
-                            error_log("Failed to prepare statement for adding permissions for role '$name'");
-                            throw new Exception('Failed to prepare statement for adding permissions.');
+        $stmt = $conn->prepare("INSERT INTO roles (name, description) VALUES (?, ?)");
+        if ($stmt) {
+            $stmt->bind_param("ss", $name, $description);
+            if ($stmt->execute()) {
+                $role_id = $stmt->insert_id;
+                error_log("Role '$name' added successfully, role_id: $role_id");
+                foreach ($permissions as $perm_id) {
+                    $insert_stmt = $conn->prepare("INSERT INTO role_permissions (role_id, permission_id) VALUES (?, ?)");
+                    if ($insert_stmt) {
+                        $insert_stmt->bind_param("ii", $role_id, $perm_id);
+                        if (!$insert_stmt->execute()) {
+                            error_log("Failed to add permission '$perm_id' for role '$name': " . htmlspecialchars($insert_stmt->error));
+                            throw new Exception('Failed to add permissions: ' . htmlspecialchars($insert_stmt->error));
                         }
+                        $insert_stmt->close();
+                    } else {
+                        error_log("Failed to prepare statement for adding permissions for role '$name'");
+                        throw new Exception('Failed to prepare statement for adding permissions.');
                     }
-                    $conn->commit();
-                    echo json_encode(['success' => true, 'message' => 'Role added successfully!']);
-                } else {
-                    error_log("Failed to add role '$name': " . htmlspecialchars($stmt->error));
-                    throw new Exception('Failed to add role: ' . htmlspecialchars($stmt->error));
                 }
-                $stmt->close();
+                echo json_encode(['success' => true, 'message' => 'Role added successfully!']);
             } else {
-                error_log("Failed to prepare statement for adding role '$name'");
-                throw new Exception('Failed to prepare statement for adding role.');
+                error_log("Failed to add role '$name': " . htmlspecialchars($stmt->error));
+                throw new Exception('Failed to add role: ' . htmlspecialchars($stmt->error));
             }
-        } catch (Exception $e) {
-            $conn->rollback();
-            throw $e;
+            $stmt->close();
+        } else {
+            error_log("Failed to prepare statement for adding role '$name'");
+            throw new Exception('Failed to prepare statement for adding role.');
         }
     } catch (Exception $e) {
         error_log("Caught exception in addRole: " . $e->getMessage());
@@ -335,46 +366,42 @@ function editRole($conn, $name, $description, $role_name, $permissions = null)
             $role_id = $role_id_row['id'];
             $role_id_stmt->close();
 
-            $conn->begin_transaction();
-            try {
-                // Update the role name and description
-                $stmt = $conn->prepare("UPDATE roles SET name = ?, description = ? WHERE id = ?");
-                if ($stmt) {
-                    $stmt->bind_param("ssi", $name, $description, $role_id);
-                    if ($stmt->execute()) {
-                        // Clear existing permissions for this role
-                        $delete_stmt = $conn->prepare("DELETE FROM role_permissions WHERE role_id = ?");
-                        $delete_stmt->bind_param("i", $role_id);
-                        $delete_stmt->execute();
-                        $delete_stmt->close();
+            // Update the role name and description
+            $stmt = $conn->prepare("UPDATE roles SET name = ?, description = ? WHERE id = ?");
+            if ($stmt) {
+                $stmt->bind_param("ssi", $name, $description, $role_id);
+                if ($stmt->execute()) {
+                    // Clear existing permissions for this role
+                    $delete_stmt = $conn->prepare("DELETE FROM role_permissions WHERE role_id = ?");
+                    $delete_stmt->bind_param("i", $role_id);
+                    $delete_stmt->execute();
+                    $delete_stmt->close();
 
-                        // Add new permissions only if permissions are provided
-                        if (is_array($permissions) && !empty($permissions)) {
-                            foreach ($permissions as $perm_id) {
-                                $insert_stmt = $conn->prepare("INSERT INTO role_permissions (role_id, permission_id) VALUES (?, ?)");
-                                if ($insert_stmt) {
-                                    $insert_stmt->bind_param("ii", $role_id, $perm_id);
-                                    if (!$insert_stmt->execute()) {
-                                        throw new Exception('Failed to add permission ' . $perm_id . ': ' . htmlspecialchars($insert_stmt->error));
-                                    }
-                                    $insert_stmt->close();
-                                } else {
-                                    throw new Exception('Failed to prepare statement for adding permission ' . $perm_id);
+                    // Add new permissions only if permissions are provided
+                    if (is_array($permissions) && !empty($permissions)) {
+                        foreach ($permissions as $perm_id) {
+                            $insert_stmt = $conn->prepare("INSERT INTO role_permissions (role_id, permission_id) VALUES (?, ?)");
+                            if ($insert_stmt) {
+                                $insert_stmt->bind_param("ii", $role_id, $perm_id);
+                                if (!$insert_stmt->execute()) {
+                                    throw new Exception('Failed to add permission ' . $perm_id . ': ' . htmlspecialchars($insert_stmt->error));
                                 }
+                                $insert_stmt->close();
+                            } else {
+                                throw new Exception('Failed to prepare statement for adding permission ' . $perm_id);
                             }
                         }
-                        $conn->commit();
                         echo json_encode(['success' => true, 'message' => 'Role updated successfully!']);
                     } else {
-                        throw new Exception('Failed to update role: ' . htmlspecialchars($stmt->error));
+                        // If no permissions are sent, still consider the role update successful since we've cleared permissions
+                        echo json_encode(['success' => true, 'message' => 'Role updated successfully!']);
                     }
-                    $stmt->close();
                 } else {
-                    throw new Exception('Failed to prepare statement for updating role.');
+                    throw new Exception('Failed to update role: ' . htmlspecialchars($stmt->error));
                 }
-            } catch (Exception $e) {
-                $conn->rollback();
-                throw $e;
+                $stmt->close();
+            } else {
+                throw new Exception('Failed to prepare statement for updating role.');
             }
         } else {
             throw new Exception('Role not found.');
@@ -389,18 +416,6 @@ function deleteRole($conn, $role_name)
     try {
         // Start transaction to ensure data integrity
         $conn->begin_transaction();
-
-        // Check if the role is assigned to any user
-        $check_stmt = $conn->prepare("SELECT COUNT(*) as count FROM users WHERE role_id = (SELECT id FROM roles WHERE name = ?)");
-        $check_stmt->bind_param("s", $role_name);
-        $check_stmt->execute();
-        $result = $check_stmt->get_result();
-        $count = $result->fetch_assoc()['count'];
-        $check_stmt->close();
-
-        if ($count > 0) {
-            throw new Exception('Cannot delete role. It is still assigned to ' . $count . ' user(s).');
-        }
 
         // First, delete from role_permissions to remove associations
         $stmt = $conn->prepare("DELETE FROM role_permissions WHERE role_id = (SELECT id FROM roles WHERE name = ?)");
@@ -509,7 +524,7 @@ function deleteRole($conn, $role_name)
         </header>
 
         <main>
-            <div class="container">
+            <div class=container>
                 <div class="row">
                     <h1>Manage Users</h1>
                     <div class="imp_message" id="message"></div>
@@ -558,6 +573,7 @@ function deleteRole($conn, $role_name)
                     </form>
 
                     <!-- Edit User Form -->
+
                     <form id="editUserForm" class="common-form">
                         <p>Edit Users</p>
                         <div class="form-group">
@@ -599,6 +615,7 @@ function deleteRole($conn, $role_name)
                         <input type="submit" value="Edit User">
                         <input type="button" id="deleteUserBtn" value="Delete User">
                     </form>
+
 
                     <form id="manageRolesForm" class="common-form">
                         <p>Manage Roles</p>
@@ -649,7 +666,11 @@ function deleteRole($conn, $role_name)
                                 <input type="submit" value="Apply Changes" id="manageRolesSubmit">
                             </div>
                         </div>
+
                     </form>
+
+
+
 
                 </div>
             </div>
@@ -806,24 +827,14 @@ function deleteRole($conn, $role_name)
                     success: function(response) {
                         var data = JSON.parse(response);
                         if (data.success) {
-                            var roleSelectAdd = document.getElementById('role');
-                            var roleSelectEdit = document.getElementById('new_role');
-                            var roleSelectManage = document.getElementById('existing_role');
-
-                            // Clear existing options
-                            [roleSelectAdd, roleSelectEdit, roleSelectManage].forEach(select => {
-                                select.innerHTML = '<option value="">Select Role</option>';
-                            });
-
+                            var roleSelect = document.getElementById('existing_role');
+                            roleSelect.innerHTML = '<option value="">Select Role</option>';
                             data.roles.forEach(function(role) {
-                                var option = document.createElement('option');
-                                option.value = role;
-                                option.text = role;
-                                // Add to all role selects, assuming you want the same roles in all dropdowns
-                                roleSelectAdd.appendChild(option.cloneNode(true));
-                                roleSelectEdit.appendChild(option.cloneNode(true));
-                                if (role !== 'Admin') { // Assuming 'Admin' can't be managed
-                                    roleSelectManage.appendChild(option.cloneNode(true));
+                                if (role !== 'Admin') {
+                                    var option = document.createElement('option');
+                                    option.value = role;
+                                    option.text = role;
+                                    roleSelect.appendChild(option);
                                 }
                             });
                         } else {
@@ -932,7 +943,6 @@ function deleteRole($conn, $role_name)
 
                 // Trigger refresh when the page loads to ensure the dropdown shows current data
                 refreshUserDropdown();
-                refreshRolesDropdown();
             });
 
             let isSubmitting = false;
@@ -1130,6 +1140,43 @@ function deleteRole($conn, $role_name)
                     checkbox.checked = false;
                 });
             }
+
+            function populateRoleDropdowns() {
+                var existingRoleSelect = document.getElementById('existing_role');
+                existingRoleSelect.innerHTML = '<option value="">Select Role</option>';
+                roles.forEach(function(role) {
+                    if (role !== 'Admin') { // Assuming you don't want to edit 'Admin'
+                        var option = document.createElement('option');
+                        option.value = role;
+                        option.text = role;
+                        existingRoleSelect.appendChild(option);
+                    }
+                });
+            }
+
+            // Fetch roles and populate dropdowns when the page loads
+            function fetchAndPopulateRoles() {
+                $.ajax({
+                    url: 'manage_users.php',
+                    type: 'POST',
+                    data: {
+                        action: 'get_roles'
+                    },
+                    success: function(response) {
+                        var data = JSON.parse(response);
+                        if (data.success) {
+                            roles = data.roles;
+                            populateRoleDropdowns();
+                        } else {
+                            console.error('Failed to fetch roles:', data.message);
+                        }
+                    },
+                    error: function(xhr, status, error) {
+                        console.error('Error fetching roles:', error);
+                    }
+                });
+            }
+            fetchAndPopulateRoles();
         });
     </script>
 </body>
