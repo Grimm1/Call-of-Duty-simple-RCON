@@ -178,7 +178,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $filename = sanitizeFileName($server_name) . '.sra';
         header('Content-Type: text/plain');
         header('Content-Disposition: attachment; filename="' . $filename . '"');
-        echo $serverMapData;
+        echo $sraContent;;
         exit;
     }
 
