@@ -222,7 +222,7 @@ th {
 
 #servers_table th:nth-child(3),
 #servers_table td:nth-child(3) {
-    width: 10%;
+    width: 7%;
 }
 
 #game_type_table th:nth-child(1),
