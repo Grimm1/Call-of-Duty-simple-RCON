@@ -14,7 +14,7 @@ if (!isset($conn) || !$conn->ping()) {
 
 // Fetch user data including roles
 $users = [];
-$stmt = $conn->prepare("SELECT users.id, users.username, roles.name AS role FROM users JOIN roles ON users.role_id = roles.id WHERE roles.name = 'minion' OR roles.name = 'admin'");
+$stmt = $conn->prepare("SELECT users.id, users.username, roles.name AS role FROM users JOIN roles ON users.role_id = roles.id");
 if ($stmt) {
     $stmt->execute();
     $result = $stmt->get_result();
@@ -38,7 +38,6 @@ if ($stmt) {
 } else {
     die("Failed to prepare statement for fetching permissions.");
 }
-
 
 // Fetch roles for the dropdown
 $roles = [];
@@ -66,10 +65,10 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
             case 'get_users':
                 getUsers($conn);
                 break;
-            case 'delete_user': // Existing case for deleting a user
+            case 'delete_user':
                 deleteUser($conn, $_POST['user_id']);
                 break;
-            case 'get_role_permissions': // New case for fetching role permissions
+            case 'get_role_permissions':
                 $roleName = $_POST['role_name'];
                 $permissions = getRolePermissions($conn, $roleName);
                 echo json_encode(['success' => true, 'permissions' => $permissions]);
@@ -121,7 +120,6 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
     exit();
 }
 
-
 function getRolePermissions($conn, $roleName)
 {
     $stmt = $conn->prepare("SELECT p.id FROM permissions p 
@@ -129,7 +127,6 @@ function getRolePermissions($conn, $roleName)
                             JOIN roles r ON rp.role_id = r.id 
                             WHERE r.name = ?");
     if ($stmt === false) {
-        // Log the error or handle it appropriately
         error_log("Failed to prepare statement: " . $conn->error);
         return []; // Return empty array or handle error differently
     }
@@ -147,6 +144,7 @@ function getRolePermissions($conn, $roleName)
     $stmt->close();
     return $permissions;
 }
+
 function addUser($conn, $username, $email, $password, $role, $permissions = [])
 {
     try {
@@ -154,7 +152,6 @@ function addUser($conn, $username, $email, $password, $role, $permissions = [])
         $sql = "INSERT INTO users (username, password, email, role_id) SELECT ?, ?, ?, id FROM roles WHERE name = ?";
         $stmt = $conn->prepare($sql);
         if ($stmt) {
-            // If email is not provided, use NULL for the database insertion
             $emailToUse = $email ?: NULL;
             $stmt->bind_param("ssss", $username, $password, $emailToUse, $role);
             if ($stmt->execute()) {
@@ -169,7 +166,15 @@ function addUser($conn, $username, $email, $password, $role, $permissions = [])
                         throw new Exception('Failed to prepare statement for adding user permissions.');
                     }
                 }
-                echo json_encode(['success' => true, 'message' => 'User added successfully!']);
+                $users = [];
+                $stmt = $conn->prepare("SELECT users.id, users.username, roles.name AS role FROM users JOIN roles ON users.role_id = roles.id");
+                $stmt->execute();
+                $result = $stmt->get_result();
+                while ($row = $result->fetch_assoc()) {
+                    $users[] = $row;
+                }
+                $stmt->close();
+                echo json_encode(['success' => true, 'message' => 'User added successfully!', 'users' => $users]);
             } else {
                 throw new Exception('Failed to add user: ' . htmlspecialchars($stmt->error));
             }
@@ -179,52 +184,6 @@ function addUser($conn, $username, $email, $password, $role, $permissions = [])
         }
     } catch (Exception $e) {
         echo json_encode(['success' => false, 'message' => 'An error occurred: ' . $e->getMessage()]);
-    }
-}
-function countAdminUsers($conn)
-{
-    $stmt = $conn->prepare("SELECT COUNT(*) as count FROM users JOIN roles ON users.role_id = roles.id WHERE roles.name = 'Admin'");
-    if ($stmt) {
-        $stmt->execute();
-        $result = $stmt->get_result();
-        $row = $result->fetch_assoc();
-        $stmt->close();
-        return $row['count'];
-    }
-    return 0;
-}
-
-function deleteUser($conn, $user_id)
-{
-    // Check if the user is an admin
-    $stmt = $conn->prepare("SELECT roles.name FROM users JOIN roles ON users.role_id = roles.id WHERE users.id = ?");
-    if ($stmt) {
-        $stmt->bind_param("i", $user_id);
-        $stmt->execute();
-        $result = $stmt->get_result();
-        $row = $result->fetch_assoc();
-        $stmt->close();
-
-        if ($row['name'] === 'Admin') {
-            // Check if this is the last admin
-            if (countAdminUsers($conn) <= 1) {
-                echo json_encode(['success' => false, 'message' => 'Cannot delete the last Admin account.']);
-                return;
-            }
-        }
-    }
-
-    $stmt = $conn->prepare("DELETE FROM users WHERE id = ?");
-    if ($stmt) {
-        $stmt->bind_param("i", $user_id);
-        if ($stmt->execute()) {
-            echo json_encode(['success' => true, 'message' => 'User deleted successfully!']);
-        } else {
-            echo json_encode(['success' => false, 'message' => 'Error deleting user: ' . htmlspecialchars($stmt->error)]);
-        }
-        $stmt->close();
-    } else {
-        echo json_encode(['success' => false, 'message' => 'Failed to prepare statement for deleting user.']);
     }
 }
 
@@ -281,10 +240,44 @@ function editUser($conn, $user_id, $new_username, $new_password, $new_role)
     }
 }
 
+function deleteUser($conn, $user_id)
+{
+    // Check if the user is an admin
+    $stmt = $conn->prepare("SELECT roles.name FROM users JOIN roles ON users.role_id = roles.id WHERE users.id = ?");
+    if ($stmt) {
+        $stmt->bind_param("i", $user_id);
+        $stmt->execute();
+        $result = $stmt->get_result();
+        $row = $result->fetch_assoc();
+        $stmt->close();
+
+        if ($row['name'] === 'Admin') {
+            // Check if this is the last admin
+            if (countAdminUsers($conn) <= 1) {
+                echo json_encode(['success' => false, 'message' => 'Cannot delete the last Admin account.']);
+                return;
+            }
+        }
+    }
+
+    $stmt = $conn->prepare("DELETE FROM users WHERE id = ?");
+    if ($stmt) {
+        $stmt->bind_param("i", $user_id);
+        if ($stmt->execute()) {
+            echo json_encode(['success' => true, 'message' => 'User deleted successfully!']);
+        } else {
+            echo json_encode(['success' => false, 'message' => 'Error deleting user: ' . htmlspecialchars($stmt->error)]);
+        }
+        $stmt->close();
+    } else {
+        echo json_encode(['success' => false, 'message' => 'Failed to prepare statement for deleting user.']);
+    }
+}
+
 function getUsers($conn)
 {
     $users = [];
-    $stmt = $conn->prepare("SELECT users.id, users.username, roles.name AS role FROM users JOIN roles ON users.role_id = roles.id WHERE roles.name = 'minion' OR roles.name = 'admin'");
+    $stmt = $conn->prepare("SELECT users.id, users.username, roles.name AS role FROM users JOIN roles ON users.role_id = roles.id");
     if ($stmt) {
         $stmt->execute();
         $result = $stmt->get_result();
@@ -298,6 +291,18 @@ function getUsers($conn)
     }
 }
 
+function countAdminUsers($conn)
+{
+    $stmt = $conn->prepare("SELECT COUNT(*) as count FROM users JOIN roles ON users.role_id = roles.id WHERE roles.name = 'Admin'");
+    if ($stmt) {
+        $stmt->execute();
+        $result = $stmt->get_result();
+        $row = $result->fetch_assoc();
+        $stmt->close();
+        return $row['count'];
+    }
+    return 0;
+}
 
 function addRole($conn, $name, $description, $permissions)
 {
@@ -337,7 +342,18 @@ function addRole($conn, $name, $description, $permissions)
                         throw new Exception('Failed to prepare statement for adding permissions.');
                     }
                 }
-                echo json_encode(['success' => true, 'message' => 'Role added successfully!']);
+
+                $stmt = $conn->prepare("SELECT name FROM roles");
+                if ($stmt) {
+                    $stmt->execute();
+                    $result = $stmt->get_result();
+                    $roles = [];
+                    while ($row = $result->fetch_assoc()) {
+                        $roles[] = $row['name'];
+                    }
+                    $stmt->close();
+                }
+                echo json_encode(['success' => true, 'message' => 'Role added successfully!', 'roles' => $roles]);
             } else {
                 error_log("Failed to add role '$name': " . htmlspecialchars($stmt->error));
                 throw new Exception('Failed to add role: ' . htmlspecialchars($stmt->error));
@@ -391,11 +407,20 @@ function editRole($conn, $name, $description, $role_name, $permissions = null)
                                 throw new Exception('Failed to prepare statement for adding permission ' . $perm_id);
                             }
                         }
-                        echo json_encode(['success' => true, 'message' => 'Role updated successfully!']);
-                    } else {
-                        // If no permissions are sent, still consider the role update successful since we've cleared permissions
-                        echo json_encode(['success' => true, 'message' => 'Role updated successfully!']);
                     }
+
+                    $stmt = $conn->prepare("SELECT name FROM roles");
+                    if ($stmt) {
+                        $stmt->execute();
+                        $result = $stmt->get_result();
+                        $roles = [];
+                        while ($row = $result->fetch_assoc()) {
+                            $roles[] = $row['name'];
+                        }
+                        $stmt->close();
+                    }
+
+                    echo json_encode(['success' => true, 'message' => 'Role updated successfully!', 'roles' => $roles]);
                 } else {
                     throw new Exception('Failed to update role: ' . htmlspecialchars($stmt->error));
                 }
@@ -414,6 +439,18 @@ function editRole($conn, $name, $description, $role_name, $permissions = null)
 function deleteRole($conn, $role_name)
 {
     try {
+        // Check if the role has any users assigned to it
+        $check_user_stmt = $conn->prepare("SELECT COUNT(*) as count FROM users WHERE role_id = (SELECT id FROM roles WHERE name = ?)");
+        $check_user_stmt->bind_param("s", $role_name);
+        $check_user_stmt->execute();
+        $result = $check_user_stmt->get_result();
+        $row = $result->fetch_assoc();
+        $check_user_stmt->close();
+
+        if ($row['count'] > 0) {
+            throw new Exception('Cannot delete role. There are still users assigned to this role.');
+        }
+
         // Start transaction to ensure data integrity
         $conn->begin_transaction();
 
@@ -433,15 +470,28 @@ function deleteRole($conn, $role_name)
         }
         $stmt->close();
 
+        // Fetch updated roles
+        $stmt = $conn->prepare("SELECT name FROM roles");
+        if ($stmt) {
+            $stmt->execute();
+            $result = $stmt->get_result();
+            $roles = [];
+            while ($row = $result->fetch_assoc()) {
+                $roles[] = $row['name'];
+            }
+            $stmt->close();
+        }
+
         // If both queries are successful, commit the transaction
         $conn->commit();
-        echo json_encode(['success' => true, 'message' => 'Role deleted successfully!']);
+        echo json_encode(['success' => true, 'message' => 'Role deleted successfully!', 'roles' => $roles]);
     } catch (Exception $e) {
         // If any part fails, roll back the transaction
         $conn->rollback();
         echo json_encode(['success' => false, 'message' => 'An error occurred: ' . $e->getMessage()]);
     }
 }
+
 ?>
 
 <!DOCTYPE html>
@@ -837,6 +887,26 @@ function deleteRole($conn, $role_name)
                                     roleSelect.appendChild(option);
                                 }
                             });
+
+                            // Also update the role selection in other forms if needed
+                            var roleSelectAddUser = document.getElementById('role');
+                            roleSelectAddUser.innerHTML = '<option value="">Select Role</option>';
+                            data.roles.forEach(function(role) {
+                                var option = document.createElement('option');
+                                option.value = role;
+                                option.text = role;
+                                roleSelectAddUser.appendChild(option);
+                            });
+
+                            // Update the edit user form role dropdown here as well
+                            var roleSelectEditUser = document.getElementById('new_role');
+                            roleSelectEditUser.innerHTML = ''; // Clear existing options
+                            data.roles.forEach(function(role) {
+                                var option = document.createElement('option');
+                                option.value = role;
+                                option.text = role;
+                                roleSelectEditUser.appendChild(option);
+                            });
                         } else {
                             console.error('Failed to refresh roles:', data.message);
                         }
@@ -943,6 +1013,7 @@ function deleteRole($conn, $role_name)
 
                 // Trigger refresh when the page loads to ensure the dropdown shows current data
                 refreshUserDropdown();
+                refreshRolesDropdown();
             });
 
             let isSubmitting = false;
@@ -969,9 +1040,6 @@ function deleteRole($conn, $role_name)
                 }
                 console.log('Permissions to be sent:', permissions);
 
-                // If no other permissions are checked, accessrcon will be the only one in the array
-                console.log('Permissions to be sent:', permissions);
-
                 if (action === 'add') {
                     if (roleName === '' || roleDescription === '') {
                         customMessage('Please provide both a name and description for the new role.');
@@ -994,6 +1062,7 @@ function deleteRole($conn, $role_name)
                             if (data.success) {
                                 console.log('Role Added:', response);
                                 refreshRolesDropdown();
+                                refreshUserDropdown(); // Refresh users as well since a new role was added
                                 customMessage('Role added successfully');
                             } else {
                                 console.error('Role Addition Failed:', data.message);
@@ -1039,6 +1108,7 @@ function deleteRole($conn, $role_name)
                             if (data.success) {
                                 console.log('Role Edited:', response);
                                 refreshRolesDropdown();
+                                refreshUserDropdown(); // Refresh users as well since roles changed
                                 customMessage('Role edited successfully');
                             } else {
                                 console.error('Role Edit Failed:', data.message);
@@ -1076,6 +1146,7 @@ function deleteRole($conn, $role_name)
                                     if (data.success) {
                                         console.log('Role Deleted:', response);
                                         refreshRolesDropdown();
+                                        refreshUserDropdown(); // Refresh users as well since a role was deleted
                                         customMessage('Role deleted successfully');
                                     } else {
                                         console.error('Role Deletion Failed:', data.message);
@@ -1140,43 +1211,6 @@ function deleteRole($conn, $role_name)
                     checkbox.checked = false;
                 });
             }
-
-            function populateRoleDropdowns() {
-                var existingRoleSelect = document.getElementById('existing_role');
-                existingRoleSelect.innerHTML = '<option value="">Select Role</option>';
-                roles.forEach(function(role) {
-                    if (role !== 'Admin') { // Assuming you don't want to edit 'Admin'
-                        var option = document.createElement('option');
-                        option.value = role;
-                        option.text = role;
-                        existingRoleSelect.appendChild(option);
-                    }
-                });
-            }
-
-            // Fetch roles and populate dropdowns when the page loads
-            function fetchAndPopulateRoles() {
-                $.ajax({
-                    url: 'manage_users.php',
-                    type: 'POST',
-                    data: {
-                        action: 'get_roles'
-                    },
-                    success: function(response) {
-                        var data = JSON.parse(response);
-                        if (data.success) {
-                            roles = data.roles;
-                            populateRoleDropdowns();
-                        } else {
-                            console.error('Failed to fetch roles:', data.message);
-                        }
-                    },
-                    error: function(xhr, status, error) {
-                        console.error('Error fetching roles:', error);
-                    }
-                });
-            }
-            fetchAndPopulateRoles();
         });
     </script>
 </body>
