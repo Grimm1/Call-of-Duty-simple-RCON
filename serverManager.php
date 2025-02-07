@@ -113,7 +113,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
         }
     } elseif (isset($_POST['update_server_id']) && !empty($_POST['update_server_id'])) {
         $conn->begin_transaction(); // Start transaction for updating server
-        
+
         $server_id = (int)$_POST['update_server_id'];
         $server_name = $_POST['server_name'];
         $ip_or_hostname = $_POST['ip_or_hostname'];
@@ -130,7 +130,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
         $stmt->bind_param("ssisi", $server_name, $ip_or_hostname, $port, $rcon_password, $server_id);
         if ($stmt->execute()) {
             $rconResponse = sendRconCommand($server_id, 'gamename');
-            
+
             if (strpos($rconResponse, 'Error:') !== false) {
                 $response['error'] = $rconResponse;
                 $conn->rollback(); // Rollback if RCON command fails
@@ -140,9 +140,9 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
                 if (preg_match('/"gamename" is:\s*"([^"]+)/', $rconResponse, $matches)) {
                     $detectedGameName = trim($matches[1]);
                     $detectedGameName = preg_replace('/\^[0-9]/', '', $detectedGameName);
-            
+
                     $server_type = mapGameNameToType($detectedGameName);
-                    
+
                     if ($server_type) {
                         $updateTypeStmt = $conn->prepare("UPDATE game_servers SET server_type = ? WHERE id = ?");
                         $updateTypeStmt->bind_param("si", $server_type, $server_id);
@@ -168,12 +168,10 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
             $response['error'] = 'Error updating server: ' . $stmt->error;
             $conn->rollback(); // Rollback if server update fails
         }
-    
-
     } else {
         // Adding new server
         $conn->begin_transaction(); // Start transaction for adding a new server
-        
+
         $server_name = $_POST['server_name'];
         $ip_or_hostname = $_POST['ip_or_hostname'];
         $port = (int)$_POST['port'];
@@ -191,7 +189,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
             $server_id = $conn->insert_id;
 
             $rconResponse = sendRconCommand($server_id, 'gamename');
-            
+
             if (strpos($rconResponse, 'Error:') !== false) {
                 $response['error'] = $rconResponse;
                 $conn->rollback(); // Rollback if RCON command fails
@@ -201,9 +199,9 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
                 if (preg_match('/"gamename" is:\s*"([^"]+)/', $rconResponse, $matches)) {
                     $detectedGameName = trim($matches[1]);
                     $detectedGameName = preg_replace('/\^[0-9]/', '', $detectedGameName);
-            
+
                     $server_type = mapGameNameToType($detectedGameName);
-                    
+
                     if ($server_type) {
                         $updateTypeStmt = $conn->prepare("UPDATE game_servers SET server_type = ? WHERE id = ?");
                         $updateTypeStmt->bind_param("si", $server_type, $server_id);
@@ -247,10 +245,11 @@ $game_names = [
     'codwaw' => 'Call of Duty: World at War'
 ];
 
-function sendRconCommand($serverId, $command) {
+function sendRconCommand($serverId, $command)
+{
     // Implementation should be in 'rcon_functions.php', but here for completeness:
     global $conn;
-    
+
     $stmt = $conn->prepare("SELECT ip_or_hostname, port, rcon_password FROM game_servers WHERE id = ?");
     $stmt->bind_param("i", $serverId);
     $stmt->execute();
@@ -284,7 +283,7 @@ function sendRconCommand($serverId, $command) {
         $readStart = microtime(true);
         while ((microtime(true) - $readStart) < 2) {
             $response .= fread($sock, 2048);
-            if (feof($sock)) break; 
+            if (feof($sock)) break;
         }
         fclose($sock);
 
@@ -296,11 +295,12 @@ function sendRconCommand($serverId, $command) {
     }
 }
 
-function mapGameNameToType($gameName) {
-        // Remove color codes (like ^7) from the game name before comparison
-        $gameName = preg_replace('/\^[0-9]/', '', $gameName);
-        $gameName = trim($gameName); // Trim any leading/trailing whitespace
-    
+function mapGameNameToType($gameName)
+{
+    // Remove color codes (like ^7) from the game name before comparison
+    $gameName = preg_replace('/\^[0-9]/', '', $gameName);
+    $gameName = trim($gameName); // Trim any leading/trailing whitespace
+
     $gameMap = [
         'Call of Duty' => 'cod',
         'Call of Duty 2' => 'cod2',
@@ -310,7 +310,8 @@ function mapGameNameToType($gameName) {
     return $gameMap[$gameName] ?? null;
 }
 
-function updateGametypes($conn, $server_id, $server_type) {
+function updateGametypes($conn, $server_id, $server_type)
+{
     // Clear existing associations from available_gametypes for this server
     $clearAvailableStmt = $conn->prepare("DELETE FROM available_gametypes WHERE server_id = ?");
     $clearAvailableStmt->bind_param("i", $server_id);
@@ -347,7 +348,7 @@ function updateGametypes($conn, $server_id, $server_type) {
     }
     $stmt->close();
 }
-
+$game_names_json = '{"cod":"Call of Duty","cod2":"Call of Duty 2","cod4":"Call of Duty 4","codwaw":"Call of Duty: WaW"}';
 ?>
 
 <!DOCTYPE html>
@@ -358,6 +359,8 @@ function updateGametypes($conn, $server_id, $server_type) {
     <link rel="stylesheet" type="text/css" href="codrs.css">
     <script type="text/javascript" src="functions/modal.js"></script>
     <script>
+        const game_names = JSON.parse('<?php echo $game_names_json; ?>');
+
         function sendForm(formId) {
             const form = document.getElementById(formId);
             const formData = new FormData(form);
@@ -388,43 +391,46 @@ function updateGametypes($conn, $server_id, $server_type) {
         }
 
         function refreshServersTable() {
-            fetch('functions/fetch_servers.php')
-                .then(response => response.json())
-                .then(data => {
-                    if (data.error) {
-                        displayMessage(data.error, 'error');
-                        return;
-                    }
+    fetch('functions/fetch_servers.php')
+        .then(response => response.json())
+        .then(data => {
+            if (data.error) {
+                displayMessage(data.error, 'error');
+                return;
+            }
 
-                    const table = document.getElementById('servers_table');
-                    let tableContent = `<tr>
-                                        <th>Server Name</th>
-                                        <th>IP or Hostname</th>
-                                        <th>Port</th>
-                                        <th>Server Type</th>
-                                        <th>Actions</th>
-                                    </tr>`;
+            const table = document.getElementById('servers_table');
+            let tableContent = `<tr>
+                                    <th>Server Name</th>
+                                    <th>IP or Hostname</th>
+                                    <th>Port</th>
+                                    <th>Server Type</th>
+                                    <th>Actions</th>
+                                </tr>`;
 
-                    data.servers.forEach(server => {
-                        tableContent += `<tr>
-                                        <td>${server.server_name}</td>
-                                        <td>${server.ip_or_hostname}</td>
-                                        <td>${server.port}</td>
-                                        <td>${server.server_type}</td>
-                                        <td>
-                                            <button onclick="editServer(${server.id})">Edit</button>
-                                            <button onclick="confirmDelete(${server.id})">Delete</button>
-                                        </td>
-                                     </tr>`;
-                    });
+            data.servers.forEach(server => {
+                // Convert server type to human-readable name
+                let serverTypeName = game_names[server.server_type] || server.server_type; // Use the server type as fallback if not found in game_names
 
-                    table.innerHTML = tableContent;
-                    adjustContainerHeight(document.querySelector('.third-container'), table);
-                })
-                .catch(error => {
-                    displayMessage('An error occurred while refreshing the servers table: ' + error, 'error');
-                });
-        }
+                tableContent += `<tr>
+                                    <td>${server.server_name}</td>
+                                    <td>${server.ip_or_hostname}</td>
+                                    <td>${server.port}</td>
+                                    <td>${serverTypeName}</td>
+                                    <td>
+                                        <button onclick="editServer(${server.id})">Edit</button>
+                                        <button onclick="confirmDelete(${server.id})">Delete</button>
+                                    </td>
+                                 </tr>`;
+            });
+
+            table.innerHTML = tableContent;
+            adjustContainerHeight(document.querySelector('.third-container'), table);
+        })
+        .catch(error => {
+            displayMessage('An error occurred while refreshing the servers table: ' + error, 'error');
+        });
+}
 
         function confirmDelete(serverId) {
             customConfirm("Are you sure you want to delete this server?", function(confirm) {
