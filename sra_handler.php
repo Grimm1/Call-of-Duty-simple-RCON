@@ -149,6 +149,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 
     if (isset($_POST['download_button'])) {
+
+        $sql = "SELECT server_name FROM game_servers WHERE id = ?";
+        $stmt = $conn->prepare($sql);
+        $stmt->bind_param("i", $_POST['server']);
+        $stmt->execute();
+        $stmt->bind_result($server_name);
+        $stmt->fetch();
+        $stmt->close();
+
         $serverId = $_POST['server'];
         $mapData = $_POST['map_data'];
         $parsedData = parseSRAText($mapData);
@@ -166,10 +175,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $sraContent .= "$key=$value\n";
         }
 
-        $filename = sanitizeFileName("server_" . $serverId) . '.sra';
+        $filename = sanitizeFileName($server_name) . '.sra';
         header('Content-Type: text/plain');
         header('Content-Disposition: attachment; filename="' . $filename . '"');
-        echo $sraContent;
+        echo $serverMapData;
         exit;
     }
 
