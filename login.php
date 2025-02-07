@@ -25,15 +25,31 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
 
             $_SESSION['user_id'] = $row['id'];
             $_SESSION['username'] = $row['username'];
-            $_SESSION['role'] = $row['role_id']; 
+            $_SESSION['role_id'] = $row['role_id']; // Keep this for permission checks
+
+            // Fetch the role name from the roles table
+            $sql_role = "SELECT name FROM roles WHERE id = ?";
+            $stmt_role = $conn->prepare($sql_role);
+            $stmt_role->bind_param("i", $row['role_id']);
+            $stmt_role->execute();
+            $role_result = $stmt_role->get_result();
+
+            if ($role_result->num_rows > 0) {
+                $role_row = $role_result->fetch_assoc();
+                $_SESSION['role_name'] = $role_row['name']; // Add role name to session
+            } else {
+                // Handle case where role does not exist
+                logMessage("Error: Role not found for role_id: " . $row['role_id']);
+                $_SESSION['role_name'] = "Unknown"; // or set to whatever default you prefer
+            }
 
             // Fetch and set permissions
-            $permissions = fetchUserPermissions($row['role_id']); // Assuming you have a function to fetch permissions
+            $permissions = fetchUserPermissions($row['role_id']);
             $_SESSION['permissions'] = $permissions;
 
             session_regenerate_id(true);
 
-            logMessage("Session variables set: user_id=" . $_SESSION['user_id'] . ", username=" . $_SESSION['username'] . ", role=" . $_SESSION['role'] . ", permissions=" . implode(", ", array_keys($permissions)));
+            logMessage("Session variables set: user_id=" . $_SESSION['user_id'] . ", username=" . $_SESSION['username'] . ", role_id=" . $_SESSION['role_id'] . ", role_name=" . $_SESSION['role_name'] . ", permissions=" . implode(", ", array_keys($permissions)));
             header("Location: index.php");
             exit();
         } else {
@@ -66,7 +82,6 @@ function fetchUserPermissions($role_id) {
     return $permissions;
 }
 
-// HTML content starts here
 ?>
 <!DOCTYPE html>
 <html>
