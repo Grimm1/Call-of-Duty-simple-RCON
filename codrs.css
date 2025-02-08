@@ -5,7 +5,7 @@
     --button-bg: #4CAF50;
     --button-hover-bg: #3a3a3a;
     --form-bg: #fff;
-    --table-border: #999; /* Darkened from #ddd for light mode */
+    --table-border: #999;
     --table-header-bg: #f2f2f2;
     --table-even-row-bg: #f9f9f9;
     --table-hover-bg: #f1f1f1;
@@ -27,7 +27,7 @@
         --button-bg: #4CAF50;
         --button-hover-bg: #585858;
         --form-bg: #2b2b2b;
-        --table-border: #444; /* Dark mode unchanged */
+        --table-border: #444;
         --table-header-bg: #333;
         --table-even-row-bg: #282828;
         --table-hover-bg: #222;
@@ -42,7 +42,6 @@
     }
 }
 
-
 html {
     overflow-y: scroll;
 }
@@ -54,14 +53,16 @@ body {
     margin: 0;
     padding: 0;
 }
+
 #branding {
-    background-image: url('gamevars/srcon_banner.png'); /* Replace with the path to your image */
+    background-image: url('gamevars/srcon_banner.png');
     background-size: 100% 100%;
-    background-position: center; /* Center the image */
-    background-repeat: no-repeat; /* Prevent repeating */
-    height: 120px; 
-    padding: 0px; /* Adjust padding as needed */
+    background-position: center;
+    background-repeat: no-repeat;
+    height: 120px;
+    padding: 0px;
 }
+
 h1, h2 {
     color: var(--text-color);
 }
@@ -95,7 +96,7 @@ label, .server-form label {
     white-space: nowrap;
 }
 
- input[type="text"], input[type="number"], input[type="email"], input[type="password"], select,
+input[type="text"], input[type="number"], input[type="email"], input[type="password"], select,
 .server-form input[type="text"], .server-form input[type="number"], .server-form input[type="password"], .server-form select {
     width: 90%;
     padding: 4px;
@@ -116,8 +117,7 @@ input[type="submit"], button, .server-form input[type="submit"], .server-form bu
     margin: 2px;
 }
 
-
-#deleteUserBtn  {
+#deleteUserBtn {
     font-size: small;
     padding: 5px 10px;
     background-color: var(--button-bg);
@@ -132,6 +132,7 @@ input[type="submit"]:hover, button:hover, .server-form input[type="submit"]:hove
     background-color: var(--button-hover-bg);
 }
 
+/* General table styles */
 table {
     width: 100%;
     border-collapse: collapse;
@@ -152,6 +153,7 @@ th {
     background-color: var(--table-header-bg);
 }
 
+/* Grouped table styles */
 #player_table, #servers_table, #game_type_table, #map_table, #users_table {
     width: 100%;
     margin-top: 5px;
@@ -159,7 +161,7 @@ th {
     box-shadow: var(--shadow);
 }
 
-#player_table th, #player_table td, 
+#player_table th, #player_table td,
 #servers_table th, #servers_table td,
 #game_type_table th, #game_type_table td,
 #map_table th, #map_table td,
@@ -167,10 +169,10 @@ th {
     padding: 2px;
     border: 1px solid var(--table-border);
     height: 30px;
-    background-color: var(--form-bg); /* Base background for all cells */
+    background-color: var(--form-bg);
 }
 
-#player_table th:nth-child(odd), 
+#player_table th:nth-child(odd),
 #servers_table th:nth-child(odd),
 #game_type_table th:nth-child(odd),
 #map_table th:nth-child(odd),
@@ -180,7 +182,7 @@ th {
     font-weight: bold;
 }
 
-#player_table th:nth-child(even), 
+#player_table th:nth-child(even),
 #servers_table th:nth-child(even),
 #game_type_table th:nth-child(even),
 #map_table th:nth-child(even),
@@ -190,7 +192,7 @@ th {
     font-weight: bold;
 }
 
-#player_table tr:nth-child(even), 
+#player_table tr:nth-child(even),
 #servers_table tr:nth-child(even),
 #game_type_table tr:nth-child(even),
 #map_table tr:nth-child(even),
@@ -198,7 +200,7 @@ th {
     background-color: var(--table-even-row-bg);
 }
 
-#player_table tr:hover, 
+#player_table tr:hover,
 #servers_table tr:hover,
 #game_type_table tr:hover,
 #map_table tr:hover,
@@ -206,61 +208,23 @@ th {
     background-color: var(--table-hover-bg);
 }
 
-
-#game_type_table th, #game_type_table td,
-#map_table th, #map_table td,
-#users_table th, #users_table td {
-    padding: 2px;
-}
-
-#player_table th:nth-child(1),
-#player_table td:nth-child(1),
-#player_table th:nth-child(3),
-#player_table td:nth-child(3),
-#player_table th:nth-child(4),
-#player_table td:nth-child(4) {
-    width: 10%;
-}
-
-#servers_table th:nth-child(3),
-#servers_table td:nth-child(3) {
-    width: 7%;
-}
-
-#game_type_table th:nth-child(1),
-#game_type_table td:nth-child(1),
-#map_table th:nth-child(1),
-#map_table td:nth-child(1),
+/* Specific styles for #users_table */
 #users_table th:nth-child(1),
 #users_table td:nth-child(1) {
     width: 45%;
-    background-color: var(--alt-bg) !important; /* Darker for first column in dark mode */
+
 }
 
-#game_type_table th:nth-child(2),
-#game_type_table td:nth-child(2),
-#map_table th:nth-child(2),
-#map_table td:nth-child(2) {
-    width: 45%;
-    background-color: var(--form-bg); /* Medium background for second column */
-}
 #users_table th:nth-child(2),
 #users_table td:nth-child(2) {
     width: 30%;
-    background-color: var(--form-bg); /* Medium background for second column */
+
 }
 
-#game_type_table th:nth-child(3),
-#game_type_table td:nth-child(3),
-#map_table th:nth-child(3),
-#map_table td:nth-child(3) {
-    width: 10%;
-    background-color: var(--table-even-row-bg); /* Lightest background for third column */
-}
 #users_table th:nth-child(3),
 #users_table td:nth-child(3) {
     width: 20%;
-    background-color: var(--table-even-row-bg); /* Lightest background for third column */
+
 }
 
 .container, .third-container {
@@ -500,7 +464,6 @@ textarea#map_data {
     margin-bottom: 5px;
 }
 
-
 .map-aliases-table, .map-rotation-table {
     width: 100%;
     table-layout: fixed;
@@ -601,7 +564,6 @@ textarea#map_data {
     font-size: 12px;
 }
 
-
 .container {
     position: relative;
 }
@@ -634,6 +596,7 @@ footer p {
         box-shadow: none;
     }
 }
+
 .file-input-container {
     display: flex;
     align-items: center;
