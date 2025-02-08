@@ -152,7 +152,7 @@ th {
     background-color: var(--table-header-bg);
 }
 
-#player_table, #servers_table, #game_type_table, #map_table {
+#player_table, #servers_table, #game_type_table, #map_table, #users_table {
     width: 100%;
     margin-top: 5px;
     font-size: small;
@@ -162,7 +162,8 @@ th {
 #player_table th, #player_table td, 
 #servers_table th, #servers_table td,
 #game_type_table th, #game_type_table td,
-#map_table th, #map_table td {
+#map_table th, #map_table td,
+#users_table th, #users_table td {
     padding: 2px;
     border: 1px solid var(--table-border);
     height: 30px;
@@ -172,7 +173,8 @@ th {
 #player_table th:nth-child(odd), 
 #servers_table th:nth-child(odd),
 #game_type_table th:nth-child(odd),
-#map_table th:nth-child(odd) {
+#map_table th:nth-child(odd),
+#users_table th:nth-child(odd) {
     background-color: var(--alt-bg);
     color: var(--text-color);
     font-weight: bold;
@@ -181,7 +183,8 @@ th {
 #player_table th:nth-child(even), 
 #servers_table th:nth-child(even),
 #game_type_table th:nth-child(even),
-#map_table th:nth-child(even) {
+#map_table th:nth-child(even),
+#users_table th:nth-child(even) {
     background-color: var(--table-header-bg);
     color: var(--text-color);
     font-weight: bold;
@@ -190,24 +193,23 @@ th {
 #player_table tr:nth-child(even), 
 #servers_table tr:nth-child(even),
 #game_type_table tr:nth-child(even),
-#map_table tr:nth-child(even) {
+#map_table tr:nth-child(even),
+#users_table tr:nth-child(even) {
     background-color: var(--table-even-row-bg);
 }
 
 #player_table tr:hover, 
 #servers_table tr:hover,
 #game_type_table tr:hover,
-#map_table tr:hover {
+#map_table tr:hover,
+#users_table tr:hover {
     background-color: var(--table-hover-bg);
 }
 
-#game_type_table thead,
-#map_table thead {
-    background-color: var(--table-header-bg);
-}
 
 #game_type_table th, #game_type_table td,
-#map_table th, #map_table td {
+#map_table th, #map_table td,
+#users_table th, #users_table td {
     padding: 2px;
 }
 
@@ -228,8 +230,11 @@ th {
 #game_type_table th:nth-child(1),
 #game_type_table td:nth-child(1),
 #map_table th:nth-child(1),
-#map_table td:nth-child(1) {
+#map_table td:nth-child(1),
+#users_table th:nth-child(1),
+#users_table td:nth-child(1) {
     width: 45%;
+    background-color: var(--alt-bg) !important; /* Darker for first column in dark mode */
 }
 
 #game_type_table th:nth-child(2),
@@ -237,6 +242,12 @@ th {
 #map_table th:nth-child(2),
 #map_table td:nth-child(2) {
     width: 45%;
+    background-color: var(--form-bg); /* Medium background for second column */
+}
+#users_table th:nth-child(2),
+#users_table td:nth-child(2) {
+    width: 30%;
+    background-color: var(--form-bg); /* Medium background for second column */
 }
 
 #game_type_table th:nth-child(3),
@@ -244,20 +255,11 @@ th {
 #map_table th:nth-child(3),
 #map_table td:nth-child(3) {
     width: 10%;
+    background-color: var(--table-even-row-bg); /* Lightest background for third column */
 }
-
-#game_type_table td:nth-child(1),
-#map_table td:nth-child(1) {
-    background-color: var(--alt-bg) !important; /* Darker for first column in dark mode */
-}
-
-#game_type_table td:nth-child(2):not(:first-child),
-#map_table td:nth-child(2):not(:first-child) {
-    background-color: var(--form-bg); /* Medium background for second column */
-}
-
-#game_type_table td:nth-child(3):not(:first-child),
-#map_table td:nth-child(3):not(:first-child) {
+#users_table th:nth-child(3),
+#users_table td:nth-child(3) {
+    width: 20%;
     background-color: var(--table-even-row-bg); /* Lightest background for third column */
 }
 
