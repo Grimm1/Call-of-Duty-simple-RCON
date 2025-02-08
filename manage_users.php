@@ -1,6 +1,9 @@
 <?php
 session_start();
 
+error_reporting(E_ALL & ~E_NOTICE & ~E_WARNING);
+ini_set('display_errors', 0);
+
 if (!isset($_SESSION['permissions']) || !isset($_SESSION['permissions']['manage_users'])) {
     echo "<div class='error'>You do not have permission to access this page.</div>";
     header("Refresh:2; url=index.php"); // Optionally, delay the redirect to show the message
@@ -60,19 +63,23 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
                 addUser($conn, $_POST['username'], $_POST['email'], $_POST['password'], $_POST['role']);
                 break;
             case 'edit_user':
-                editUser($conn, $_POST['user_id'], $_POST['new_username'], $_POST['new_password'], $_POST['new_role']);
+                editUser($conn, $_POST['user_id'], $_POST['new_username'] ?? '', $_POST['new_password'] ?? '', $_POST['new_role'] ?? '');
                 break;
             case 'get_users':
                 getUsers($conn);
                 break;
             case 'delete_user':
-                deleteUser($conn, $_POST['user_id']);
-                break;
+                $user_id = $_POST['user_id'];
+                $result = deleteUser($conn, $user_id);
+                header('Content-Type: application/json');
+                echo json_encode($result);
+                exit();
             case 'get_role_permissions':
                 $roleName = $_POST['role_name'];
                 $permissions = getRolePermissions($conn, $roleName);
+                header('Content-Type: application/json');
                 echo json_encode(['success' => true, 'permissions' => $permissions]);
-                break;
+                exit();
             case 'add_role':
                 addRole($conn, $_POST['name'], $_POST['description'], $_POST['permissions']);
                 break;
@@ -92,14 +99,17 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
                     $roleDetails = $result->fetch_assoc();
                     $stmt->close();
                     if ($roleDetails) {
+                        header('Content-Type: application/json');
                         echo json_encode(['success' => true, 'name' => $roleDetails['name'], 'description' => $roleDetails['description']]);
                     } else {
+                        header('Content-Type: application/json');
                         echo json_encode(['success' => false, 'message' => 'Role not found.']);
                     }
                 } else {
+                    header('Content-Type: application/json');
                     echo json_encode(['success' => false, 'message' => 'Failed to prepare statement.']);
                 }
-                break;
+                exit();
             case 'get_roles':
                 $stmt = $conn->prepare("SELECT name FROM roles");
                 if ($stmt) {
@@ -110,11 +120,13 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
                         $roles[] = $row['name'];
                     }
                     $stmt->close();
+                    header('Content-Type: application/json');
                     echo json_encode(['success' => true, 'roles' => $roles]);
                 } else {
+                    header('Content-Type: application/json');
                     echo json_encode(['success' => false, 'message' => 'Failed to prepare statement for fetching roles.']);
                 }
-                break;
+                exit();
         }
     }
     exit();
@@ -156,6 +168,8 @@ function addUser($conn, $username, $email, $password, $role, $permissions = [])
             $stmt->bind_param("ssss", $username, $password, $emailToUse, $role);
             if ($stmt->execute()) {
                 $user_id = $stmt->insert_id;
+                $stmt->close(); // Close the insert statement immediately after its use
+
                 foreach ($permissions as $perm_id) {
                     $insert_perm_stmt = $conn->prepare("INSERT INTO user_permissions (user_id, permission_id) VALUES (?, ?)");
                     if ($insert_perm_stmt) {
@@ -166,25 +180,33 @@ function addUser($conn, $username, $email, $password, $role, $permissions = [])
                         throw new Exception('Failed to prepare statement for adding user permissions.');
                     }
                 }
+
+                // Prepare a new statement for fetching updated users list
                 $users = [];
                 $stmt = $conn->prepare("SELECT users.id, users.username, roles.name AS role FROM users JOIN roles ON users.role_id = roles.id");
-                $stmt->execute();
-                $result = $stmt->get_result();
-                while ($row = $result->fetch_assoc()) {
-                    $users[] = $row;
+                if ($stmt) {
+                    $stmt->execute();
+                    $result = $stmt->get_result();
+                    while ($row = $result->fetch_assoc()) {
+                        $users[] = $row;
+                    }
+                    $stmt->close(); // Now this close is for the new statement, not the one used for insertion
+                    header('Content-Type: application/json');
+                    echo json_encode(['success' => true, 'message' => 'User added successfully!', 'users' => $users]);
+                } else {
+                    throw new Exception('Failed to prepare statement for fetching updated users list.');
                 }
-                $stmt->close();
-                echo json_encode(['success' => true, 'message' => 'User added successfully!', 'users' => $users]);
             } else {
                 throw new Exception('Failed to add user: ' . htmlspecialchars($stmt->error));
             }
-            $stmt->close();
         } else {
             throw new Exception('Failed to prepare statement for adding user.');
         }
     } catch (Exception $e) {
+        header('Content-Type: application/json');
         echo json_encode(['success' => false, 'message' => 'An error occurred: ' . $e->getMessage()]);
     }
+    exit();
 }
 
 function editUser($conn, $user_id, $new_username, $new_password, $new_role)
@@ -201,8 +223,9 @@ function editUser($conn, $user_id, $new_username, $new_password, $new_role)
         if ($row['name'] === 'Admin' && $new_role !== 'Admin') {
             // Check if this is the last admin
             if (countAdminUsers($conn) <= 1) {
+                header('Content-Type: application/json');
                 echo json_encode(['success' => false, 'message' => 'Cannot change the role of the last Admin account.']);
-                return;
+                exit();
             }
         }
     }
@@ -211,13 +234,13 @@ function editUser($conn, $user_id, $new_username, $new_password, $new_role)
     $params = [];
     $types = "";
 
-    if ($new_username !== "") {
+    if (isset($new_username) && $new_username !== "") {
         $sql .= "username = ?, ";
         $params[] = $new_username;
         $types .= "s";
     }
 
-    if ($new_password !== "") {
+    if (isset($new_password) && $new_password !== "") {
         $new_password = password_hash($new_password, PASSWORD_BCRYPT);
         $sql .= "password = ?, ";
         $params[] = $new_password;
@@ -232,12 +255,25 @@ function editUser($conn, $user_id, $new_username, $new_password, $new_role)
     $stmt = $conn->prepare($sql);
     if ($stmt) {
         $stmt->bind_param($types, ...$params);
-        $stmt->execute();
-        $stmt->close();
-        echo json_encode(['success' => true, 'message' => 'User updated successfully!']);
+        error_log("SQL Query: " . $sql); // Log the SQL query
+        error_log("Parameters: " . print_r($params, true)); // Log parameters being passed
+        if ($stmt->execute()) {
+            error_log("User updated successfully with new role: " . $new_role);
+            $stmt->close();
+            header('Content-Type: application/json');
+            echo json_encode(['success' => true, 'message' => 'User updated successfully!']);
+        } else {
+            error_log("Failed to update user: " . $stmt->error);
+            $stmt->close();
+            header('Content-Type: application/json');
+            echo json_encode(['success' => false, 'message' => 'Failed to update user: ' . htmlspecialchars($conn->error)]);
+        }
     } else {
+        error_log("Failed to prepare statement: " . $conn->error);
+        header('Content-Type: application/json');
         echo json_encode(['success' => false, 'message' => 'Statement preparation failed: ' . htmlspecialchars($conn->error)]);
     }
+    exit();
 }
 
 function deleteUser($conn, $user_id)
@@ -254,8 +290,7 @@ function deleteUser($conn, $user_id)
         if ($row['name'] === 'Admin') {
             // Check if this is the last admin
             if (countAdminUsers($conn) <= 1) {
-                echo json_encode(['success' => false, 'message' => 'Cannot delete the last Admin account.']);
-                return;
+                return ['success' => false, 'message' => 'Cannot delete the last Admin account.'];
             }
         }
     }
@@ -264,13 +299,13 @@ function deleteUser($conn, $user_id)
     if ($stmt) {
         $stmt->bind_param("i", $user_id);
         if ($stmt->execute()) {
-            echo json_encode(['success' => true, 'message' => 'User deleted successfully!']);
+            return ['success' => true, 'message' => 'User deleted successfully!'];
         } else {
-            echo json_encode(['success' => false, 'message' => 'Error deleting user: ' . htmlspecialchars($stmt->error)]);
+            return ['success' => false, 'message' => 'Error deleting user: ' . htmlspecialchars($stmt->error)];
         }
         $stmt->close();
     } else {
-        echo json_encode(['success' => false, 'message' => 'Failed to prepare statement for deleting user.']);
+        return ['success' => false, 'message' => 'Failed to prepare statement for deleting user.'];
     }
 }
 
@@ -282,13 +317,16 @@ function getUsers($conn)
         $stmt->execute();
         $result = $stmt->get_result();
         while ($row = $result->fetch_assoc()) {
-            $users[] = $row;
+            $users[] = $row; // Make sure 'id' is included here
         }
         $stmt->close();
+        header('Content-Type: application/json');
         echo json_encode(['success' => true, 'users' => $users]);
     } else {
+        header('Content-Type: application/json');
         echo json_encode(['success' => false, 'message' => 'Failed to prepare statement for fetching users.']);
     }
+    exit();
 }
 
 function countAdminUsers($conn)
@@ -353,6 +391,7 @@ function addRole($conn, $name, $description, $permissions)
                     }
                     $stmt->close();
                 }
+                header('Content-Type: application/json');
                 echo json_encode(['success' => true, 'message' => 'Role added successfully!', 'roles' => $roles]);
             } else {
                 error_log("Failed to add role '$name': " . htmlspecialchars($stmt->error));
@@ -365,8 +404,10 @@ function addRole($conn, $name, $description, $permissions)
         }
     } catch (Exception $e) {
         error_log("Caught exception in addRole: " . $e->getMessage());
+        header('Content-Type: application/json');
         echo json_encode(['success' => false, 'message' => 'An error occurred: ' . $e->getMessage()]);
     }
+    exit();
 }
 
 function editRole($conn, $name, $description, $role_name, $permissions = null)
@@ -420,7 +461,12 @@ function editRole($conn, $name, $description, $role_name, $permissions = null)
                         $stmt->close();
                     }
 
-                    echo json_encode(['success' => true, 'message' => 'Role updated successfully!', 'roles' => $roles]);
+                    header('Content-Type: application/json');
+                    echo json_encode([
+                        'success' => true,
+                        'message' => 'Role updated successfully!',
+                        'roles' => $roles
+                    ]);
                 } else {
                     throw new Exception('Failed to update role: ' . htmlspecialchars($stmt->error));
                 }
@@ -432,8 +478,10 @@ function editRole($conn, $name, $description, $role_name, $permissions = null)
             throw new Exception('Role not found.');
         }
     } catch (Exception $e) {
+        header('Content-Type: application/json');
         echo json_encode(['success' => false, 'message' => 'An error occurred: ' . $e->getMessage()]);
     }
+    exit();
 }
 
 function deleteRole($conn, $role_name)
@@ -484,12 +532,15 @@ function deleteRole($conn, $role_name)
 
         // If both queries are successful, commit the transaction
         $conn->commit();
+        header('Content-Type: application/json');
         echo json_encode(['success' => true, 'message' => 'Role deleted successfully!', 'roles' => $roles]);
     } catch (Exception $e) {
         // If any part fails, roll back the transaction
         $conn->rollback();
+        header('Content-Type: application/json');
         echo json_encode(['success' => false, 'message' => 'An error occurred: ' . $e->getMessage()]);
     }
+    exit();
 }
 
 ?>
@@ -501,70 +552,8 @@ function deleteRole($conn, $role_name)
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Call of Duty Simple RCON - Manage Users</title>
-    <link rel="stylesheet" type="text/css" href="codrs.css?v=<?php echo time(); ?>">
-    <style>
-        .manage_roles_wrapper {
-            display: flex;
-            flex-direction: row;
-            gap: 20px;
-            /* Space between left and right sections */
-        }
+    <link rel="stylesheet" type="text/css" href="codrs.css">
 
-        .manage_roles_left {
-            flex: 2;
-        }
-
-        .manage_roles_right {
-            flex: 1;
-        }
-
-        .manage_roles_right {
-            display: flex;
-            flex-direction: column;
-            justify-content: flex-end;
-            /* Aligns content to the bottom */
-        }
-
-        .form-group-roles {
-            display: flex;
-            flex-direction: column;
-            margin-bottom: 15px;
-        }
-
-        .form-group-roles label,
-        .form-group-roles input,
-        .form-group-roles select {
-            width: 100%;
-            margin-bottom: 5px;
-            /* Space between label and input/select */
-        }
-
-        #roleDetails {
-            display: flex;
-            flex-direction: column;
-        }
-
-        #permissionsCheckboxes {
-            display: flex;
-            flex-direction: column;
-            flex-grow: 1;
-            /* Allows this div to grow and push submit button to bottom */
-        }
-
-        .permission-checkbox {
-            margin-bottom: 10px;
-        }
-
-        /* Ensure checkboxes don't push to the right */
-        .permission-checkbox label {
-            display: flex;
-            align-items: center;
-        }
-
-        #manageRolesSubmit {
-            margin-top: 10px;
-        }
-    </style>
 </head>
 
 <body>
@@ -572,15 +561,29 @@ function deleteRole($conn, $role_name)
         <header>
             <?php include 'header.php'; ?>
         </header>
-
         <main>
-            <div class=container>
+            <div class="container">
                 <div class="row">
                     <h1>Manage Users</h1>
-                    <div class="imp_message" id="message"></div>
-                    <!-- Add User Form -->
-                    <form id="addUserForm" class="common-form">
-                        <p>Add New User</p>
+                    <div class="container message" id="message_container" style="display: none;"></div>
+
+                    <!-- Users Table -->
+                    <table id="users_table">
+                        <thead>
+                            <tr>
+                                <th>Username</th>
+                                <th>Role</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <!-- User data will be dynamically inserted here -->
+                        </tbody>
+                    </table>
+
+                    <!-- Form for adding/editing user -->
+                    <form id="userForm" class="common-form">
+                        <p id="formTitle">Add New User</p>
                         <div class="form-group">
                             <label for="username">Username:</label>
                             <input type="text" id="username" name="username" required>
@@ -591,81 +594,23 @@ function deleteRole($conn, $role_name)
                         </div>
                         <div class="form-group">
                             <label for="password">Password:</label>
-                            <input type="password" id="password" name="password" required>
+                            <input type="password" id="password" name="password">
                         </div>
                         <div class="form-group">
                             <label for="role">Role:</label>
                             <select id="role" name="role" required>
                                 <option value="">Select Role</option>
                                 <?php
-                                if (is_array($roles)) {
-                                    foreach ($roles as $index => $role) {
-                                        // Fetch the description for this role
-                                        $stmt = $conn->prepare("SELECT description FROM roles WHERE name = ?");
-                                        if ($stmt) {
-                                            $stmt->bind_param("s", $role);
-                                            $stmt->execute();
-                                            $result = $stmt->get_result();
-                                            $roleDescription = $result->fetch_assoc()['description'] ?? 'No description available';
-                                            $stmt->close();
-
-                                            echo '<option value="' . htmlspecialchars($role) . '" title="' . htmlspecialchars($roleDescription) . '">' . htmlspecialchars($role) . '</option>';
-                                        }
-                                    }
-                                } else {
-                                    echo '<option value="">Error: Roles not available</option>';
+                                foreach ($roles as $role) {
+                                    echo '<option value="' . htmlspecialchars($role) . '">' . htmlspecialchars($role) . '</option>';
                                 }
                                 ?>
                             </select>
                         </div>
-                        <input type="submit" value="Add User">
-                        <div class="loader" id="addLoader"></div>
+                        <input type="hidden" id="user_id" name="user_id" value="">
+                        <input type="submit" id="userFormSubmit" value="Add User">
+                        <div class="loader" id="userLoader"></div>
                     </form>
-
-                    <!-- Edit User Form -->
-
-                    <form id="editUserForm" class="common-form">
-                        <p>Edit Users</p>
-                        <div class="form-group">
-                            <label for="user_id">Select User:</label>
-                            <select id="user_select" name="user_id">
-                                <option value="">Select User</option>
-                                <?php foreach ($users as $user): ?>
-                                    <option value="<?php echo $user['id']; ?>"><?php echo htmlspecialchars($user['username']); ?> (<?php echo htmlspecialchars($user['role']); ?>)</option>
-                                <?php endforeach; ?>
-                            </select>
-                            <div class="loader" id="editLoader"></div>
-                        </div>
-                        <div class="form-group" id="usernameGroup">
-                            <label for="new_username">New Username:</label>
-                            <input type="text" id="new_username" name="new_username">
-                        </div>
-                        <div class="form-group" id="passwordGroup">
-                            <label for="new_password">New Password:</label>
-                            <input type="password" id="new_password" name="new_password">
-                        </div>
-                        <div class="form-group" id="roleGroup">
-                            <label for="new_role">Role:</label>
-                            <select id="new_role" name="new_role" required>
-                                <?php foreach ($roles as $role): ?>
-                                    <?php
-                                    $stmt = $conn->prepare("SELECT description FROM roles WHERE name = ?");
-                                    if ($stmt) {
-                                        $stmt->bind_param("s", $role);
-                                        $stmt->execute();
-                                        $result = $stmt->get_result();
-                                        $roleDescription = $result->fetch_assoc()['description'] ?? 'No description available';
-                                        $stmt->close();
-                                    }
-                                    ?>
-                                    <option value="<?php echo htmlspecialchars($role); ?>" title="<?php echo htmlspecialchars($roleDescription); ?>"><?php echo htmlspecialchars($role); ?></option>
-                                <?php endforeach; ?>
-                            </select>
-                        </div>
-                        <input type="submit" value="Edit User">
-                        <input type="button" id="deleteUserBtn" value="Delete User">
-                    </form>
-
 
                     <form id="manageRolesForm" class="common-form">
                         <p>Manage Roles</p>
@@ -716,12 +661,7 @@ function deleteRole($conn, $role_name)
                                 <input type="submit" value="Apply Changes" id="manageRolesSubmit">
                             </div>
                         </div>
-
                     </form>
-
-
-
-
                 </div>
             </div>
         </main>
@@ -746,6 +686,111 @@ function deleteRole($conn, $role_name)
     <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.5.1/jquery.min.js"></script>
     <script type="text/javascript" src="functions/modal.js"></script>
     <script>
+        // Move functions outside of DOMContentLoaded to make them globally accessible
+
+        function displayMessage(message, type) {
+                var messageContainer = document.getElementById('message_container');
+                messageContainer.innerHTML = message;
+                messageContainer.className = 'container message ' + type;
+                messageContainer.style.display = 'block';
+                // Optionally, hide the message after some time
+                setTimeout(function() {
+                    messageContainer.style.display = 'none';
+                }, 5000); // Hide after 5 seconds
+            }
+        function editUser(userId) {
+            $.ajax({
+                url: 'functions/get_user_details.php',
+                type: 'POST',
+                data: {
+                    user_id: userId
+                },
+                success: function(response) {
+                    if (response.success) {
+                        document.getElementById('formTitle').textContent = 'Edit User';
+                        document.getElementById('username').value = response.username;
+                        document.getElementById('email').value = response.email || '';
+                        document.getElementById('role').value = response.role;
+                        document.getElementById('user_id').value = userId;
+                        document.getElementById('password').value = ''; // Clear password field for security
+                        document.getElementById('userFormSubmit').value = 'Save Changes';
+                        document.getElementById('role').name = "new_role";
+                    } else {
+                        displayMessage(response.message, 'error');
+                    }
+                },
+                error: function(xhr, status, error) {
+                    console.error("Error fetching user details:", status, error);
+                    displayMessage('Error loading user details.', 'error');
+                }
+            });
+        }
+
+        function confirmDelete(userId) {
+            customConfirm("Are you sure you want to delete this user?", function(confirmed) {
+                if (confirmed) {
+                    deleteUser(userId);
+                }
+            });
+        }
+
+        function refreshUsersTable() {
+            $('#users_table tbody').empty();
+            $.ajax({
+                url: 'manage_users.php',
+                type: 'POST',
+                data: {
+                    action: 'get_users'
+                },
+                success: function(response) {
+                    if (response.success) {
+                        response.users.forEach(function(user) {
+                            $('#users_table tbody').append(
+                                '<tr>' +
+                                '<td>' + user.username + '</td>' +
+                                '<td>' + user.role + '</td>' +
+                                '<td><button onclick="console.log(\'Edit button clicked\', ' + user.id + '); editUser(' + user.id + ')">Edit</button> ' +
+                                '<button onclick="confirmDelete(' + user.id + ')">Delete</button></td>' +
+                                '</tr>'
+                            );
+                        });
+                    } else {
+                        displayMessage('Failed to refresh user list: ' + response.message, 'error');
+                    }
+                },
+                error: function(xhr, status, error) {
+                    console.error("Error fetching users:", status, error);
+                    displayMessage('Error refreshing user list.', 'error');
+                }
+            });
+        }
+
+        function deleteUser(userId) {
+            var loader = document.getElementById('userLoader');
+            loader.style.display = 'inline-block';
+            $.ajax({
+                url: 'manage_users.php',
+                type: 'POST',
+                data: {
+                    action: 'delete_user',
+                    user_id: userId
+                },
+                success: function(response) {
+                    loader.style.display = 'none';
+                    if (response.success) {
+                        displayMessage(response.message, 'success');
+                        refreshUsersTable();
+                    } else {
+                        displayMessage(response.message, 'error');
+                    }
+                },
+                error: function() {
+                    displayMessage('Error deleting user.', 'error');
+                    loader.style.display = 'none';
+                }
+            });
+        }
+
         document.addEventListener('DOMContentLoaded', function() {
             document.getElementById('role_action').addEventListener('change', function() {
                 onRoleActionChange(this.value);
@@ -789,12 +834,11 @@ function deleteRole($conn, $role_name)
                         role_name: roleName
                     },
                     success: function(response) {
-                        var data = JSON.parse(response);
-                        if (data.success) {
-                            document.getElementById('new_role_name').value = data.name || '';
-                            document.getElementById('new_role_description').value = data.description || '';
+                        if (response.success) {
+                            document.getElementById('new_role_name').value = response.name || '';
+                            document.getElementById('new_role_description').value = response.description || '';
                         } else {
-                            console.error('Failed to load role details:', data.message);
+                            console.error('Failed to load role details:', response.message);
                         }
                     },
                     error: function(xhr, status, error) {
@@ -802,384 +846,51 @@ function deleteRole($conn, $role_name)
                     }
                 });
             }
-
-            document.getElementById('user_select').addEventListener('change', function() {
-                loadUserDetails(this.value);
-            });
-
-            function loadUserDetails(userId) {
-                if (userId) {
-                    var loader = document.getElementById('editLoader');
-                    loader.style.display = 'inline-block';
-                    $.ajax({
-                        url: 'functions/get_user_details.php',
-                        type: 'POST',
-                        data: {
-                            user_id: userId
-                        },
-                        success: function(response) {
-                            var data = JSON.parse(response);
-                            if (data.success) {
-                                $('#new_username').val(data.username);
-                                $('#new_role').val(data.role);
-                            } else {
-                                $('#message').html('<div class="error">' + data.message + '</div>');
-                            }
-                            loader.style.display = 'none';
-                        },
-                        error: function() {
-                            $('#message').html('<div class="error">Error loading user details.</div>');
-                            loader.style.display = 'none';
-                        }
-                    });
-                }
+            $('#userForm').submit(function(e) {
+    e.preventDefault();
+    var formData = $(this).serialize();
+    console.log("Form Data:", formData);
+    var action = document.getElementById('user_id').value ? 'edit_user' : 'add_user';
+    var loader = document.getElementById('userLoader');
+    loader.style.display = 'inline-block';
+    $.ajax({
+        url: 'manage_users.php',
+        type: 'POST',
+        data: formData + '&action=' + action,
+        success: function(response) {
+            loader.style.display = 'none';
+            if (response.success) {
+                displayMessage(response.message, 'success');
+                refreshUsersTable();
+                
+                // Reset form to add new user state
+                document.getElementById('formTitle').textContent = 'Add New User';
+                document.getElementById('userForm').reset(); // Reset all form fields
+                document.getElementById('user_id').value = ''; // Clear hidden field
+                document.getElementById('userFormSubmit').value = 'Add User'; // Change button text
+                document.getElementById('role').name = "role"; // Reset role field name
+            } else {
+                displayMessage(response.message, 'error');
             }
+        },
+        error: function() {
+            displayMessage('Error processing user data.', 'error');
+            loader.style.display = 'none';
+        }
+    });
+});
 
-            function refreshUserDropdown() {
-                $.ajax({
-                    url: 'manage_users.php',
-                    type: 'POST',
-                    data: {
-                        action: 'get_users'
-                    },
-                    success: function(response) {
-                        var data = JSON.parse(response);
-                        if (data.success) {
-                            var $dropdown = $('#user_select');
-                            $dropdown.empty();
-                            $dropdown.append($('<option>', {
-                                value: "",
-                                text: "Select User"
-                            }));
-                            data.users.forEach(user => {
-                                $dropdown.append($('<option>', {
-                                    value: user.id,
-                                    text: `${user.username} (${user.role})`
-                                }));
-                            });
-                        } else {
-                            $('#message').html('<div class="error">Failed to refresh user list.</div>');
-                        }
-                    },
-                    error: function() {
-                        $('#message').html('<div class="error">Error refreshing user list.</div>');
-                    }
-                });
-            }
-
-            function refreshRolesDropdown() {
-                $.ajax({
-                    url: 'manage_users.php',
-                    type: 'POST',
-                    data: {
-                        action: 'get_roles'
-                    },
-                    success: function(response) {
-                        var data = JSON.parse(response);
-                        if (data.success) {
-                            var roleSelect = document.getElementById('existing_role');
-                            roleSelect.innerHTML = '<option value="">Select Role</option>';
-                            data.roles.forEach(function(role) {
-                                if (role !== 'Admin') {
-                                    var option = document.createElement('option');
-                                    option.value = role;
-                                    option.text = role;
-                                    roleSelect.appendChild(option);
-                                }
-                            });
-
-                            // Also update the role selection in other forms if needed
-                            var roleSelectAddUser = document.getElementById('role');
-                            roleSelectAddUser.innerHTML = '<option value="">Select Role</option>';
-                            data.roles.forEach(function(role) {
-                                var option = document.createElement('option');
-                                option.value = role;
-                                option.text = role;
-                                roleSelectAddUser.appendChild(option);
-                            });
-
-                            // Update the edit user form role dropdown here as well
-                            var roleSelectEditUser = document.getElementById('new_role');
-                            roleSelectEditUser.innerHTML = ''; // Clear existing options
-                            data.roles.forEach(function(role) {
-                                var option = document.createElement('option');
-                                option.value = role;
-                                option.text = role;
-                                roleSelectEditUser.appendChild(option);
-                            });
-                        } else {
-                            console.error('Failed to refresh roles:', data.message);
-                        }
-                    },
-                    error: function(xhr, status, error) {
-                        console.error('Error refreshing roles:', error);
-                    }
-                });
-            }
-
-            function deleteUser(userId) {
-                if (userId) {
-                    customConfirm("Are you sure you want to delete this user?", function(confirmed) {
-                        if (confirmed) {
-                            var loader = document.getElementById('editLoader');
-                            loader.style.display = 'inline-block';
-                            $.ajax({
-                                url: 'manage_users.php',
-                                type: 'POST',
-                                data: {
-                                    action: 'delete_user',
-                                    user_id: userId
-                                },
-                                success: function(response) {
-                                    var data = JSON.parse(response);
-                                    showAjaxMessage(data.message, function() {
-                                        loader.style.display = 'none';
-                                        refreshUserDropdown();
-                                    });
-                                },
-                                error: function() {
-                                    showAjaxMessage("Error deleting user.", function() {
-                                        loader.style.display = 'none';
-                                    });
-                                }
-                            });
-                        }
-                    });
-                } else {
-                    showAjaxMessage("Please select a user to delete.");
-                }
-            }
-
-            function clearRoleFormFields() {
-                document.getElementById('new_role_name').value = '';
-                document.getElementById('new_role_description').value = '';
-                document.getElementById('existing_role').selectedIndex = 0;
-                clearPermissions();
-            }
-
-            $(document).ready(function() {
-                $('#addUserForm').submit(function(e) {
-                    e.preventDefault();
-                    var loader = document.getElementById('addLoader');
-                    loader.style.display = 'inline-block';
-                    $.ajax({
-                        url: 'manage_users.php',
-                        type: 'POST',
-                        data: $(this).serialize() + '&action=add_user',
-                        success: function(response) {
-                            var data = JSON.parse(response);
-                            $('#message').html('<div class="' + (data.success ? 'success' : 'error') + '">' + data.message + '</div>');
-                            loader.style.display = 'none';
-                            refreshUserDropdown();
-                        },
-                        error: function() {
-                            $('#message').html('<div class="error">Error adding user.</div>');
-                            loader.style.display = 'none';
-                        }
-                    });
-                });
-
-                $('#editUserForm').submit(function(e) {
-                    e.preventDefault();
-                    var formData = $(this).serialize() + '&action=edit_user';
-                    var loader = document.getElementById('editLoader');
-                    loader.style.display = 'inline-block';
-                    $.ajax({
-                        url: 'manage_users.php',
-                        type: 'POST',
-                        data: formData,
-                        success: function(response) {
-                            var data = JSON.parse(response);
-                            $('#message').html('<div class="' + (data.success ? 'success' : 'error') + '">' + data.message + '</div>');
-                            loader.style.display = 'none';
-                            refreshUserDropdown(); // Refresh user dropdown after edit
-                        },
-                        error: function() {
-                            $('#message').html('<div class="error">Error updating user.</div>');
-                            loader.style.display = 'none';
-                        }
-                    });
-                });
-
-                // Delete user button click handler
-                $('#deleteUserBtn').click(function() {
-                    var userId = $('#user_select').val();
-                    if (userId) {
-                        deleteUser(userId);
-                    } else {
-                        $('#message').html('<div class="error">Please select a user to delete.</div>');
-                    }
-                });
-
-                // Trigger refresh when the page loads to ensure the dropdown shows current data
-                refreshUserDropdown();
-                refreshRolesDropdown();
-            });
-
-            let isSubmitting = false;
-            document.getElementById('manageRolesForm').addEventListener('submit', function(event) {
-                event.preventDefault();
-                if (isSubmitting) {
-                    console.error('Attempted to submit while another submission is in progress');
-                    return;
-                }
-                isSubmitting = true;
-                console.log('Submitting form with action:', document.getElementById('role_action').value);
-
-                let action = document.getElementById('role_action').value;
-                let roleName = document.getElementById('new_role_name').value.trim();
-                let roleDescription = document.getElementById('new_role_description').value.trim();
-                let existingRole = document.getElementById('existing_role').value;
-
-                // Define permissions here
-                let permissions = Array.from(document.querySelectorAll('input[name="permissions[]"]:checked:not([disabled])')).map(checkbox => checkbox.value);
-                let accessrconCheckbox = document.querySelector('input[name="permissions[]"][value="4"]');
-                if (accessrconCheckbox) {
-                    permissions.push(accessrconCheckbox.value);
-                    console.log('accessrcon permission added to array');
-                }
-                console.log('Permissions to be sent:', permissions);
-
-                if (action === 'add') {
-                    if (roleName === '' || roleDescription === '') {
-                        customMessage('Please provide both a name and description for the new role.');
-                        isSubmitting = false;
-                        return;
-                    }
-                    document.getElementById('manageRolesSubmit').disabled = true; // Disable button
-                    $.ajax({
-                        url: 'manage_users.php',
-                        type: 'POST',
-                        data: {
-                            action: 'add_role',
-                            name: roleName,
-                            description: roleDescription,
-                            permissions: permissions
-                        },
-                        success: function(response) {
-                            document.getElementById('manageRolesSubmit').disabled = false;
-                            var data = JSON.parse(response);
-                            if (data.success) {
-                                console.log('Role Added:', response);
-                                refreshRolesDropdown();
-                                refreshUserDropdown(); // Refresh users as well since a new role was added
-                                customMessage('Role added successfully');
-                            } else {
-                                console.error('Role Addition Failed:', data.message);
-                                customMessage(data.message);
-                            }
-                        },
-                        error: function(xhr, status, error) {
-                            document.getElementById('manageRolesSubmit').disabled = false;
-                            console.error('Error adding role:', error);
-                            if (xhr.responseText) {
-                                console.error('Server Response:', xhr.responseText);
-                            }
-                            customMessage('An error occurred while adding the role. Please try again or contact support.');
-                        },
-                        complete: function() {
-                            isSubmitting = false; // Reset flag
-                            console.log('AJAX call completed, isSubmitting flag reset');
-                        }
-                    });
-                } else if (action === 'edit') {
-                    if (!existingRole) {
-                        customMessage('Please select a role to edit.');
-                        isSubmitting = false;
-                        return;
-                    }
-                    if (roleName === '' || roleDescription === '') {
-                        customMessage('Please provide both a name and description for the role.');
-                        isSubmitting = false;
-                        return;
-                    }
-                    $.ajax({
-                        url: 'manage_users.php',
-                        type: 'POST',
-                        data: {
-                            action: 'edit_role',
-                            name: roleName,
-                            description: roleDescription,
-                            existing_role: existingRole,
-                            permissions: permissions
-                        },
-                        success: function(response) {
-                            var data = JSON.parse(response);
-                            if (data.success) {
-                                console.log('Role Edited:', response);
-                                refreshRolesDropdown();
-                                refreshUserDropdown(); // Refresh users as well since roles changed
-                                customMessage('Role edited successfully');
-                            } else {
-                                console.error('Role Edit Failed:', data.message);
-                                customMessage(data.message);
-                            }
-                        },
-                        error: function(xhr, status, error) {
-                            console.error('Error editing role:', error);
-                            if (xhr.responseText) {
-                                console.error('Server Response:', xhr.responseText);
-                            }
-                            customMessage('An error occurred while editing the role. Please try again or contact support.');
-                        },
-                        complete: function() {
-                            isSubmitting = false;
-                        }
-                    });
-                } else if (action === 'delete') {
-                    if (!existingRole) {
-                        customMessage('Please select a role to delete.');
-                        isSubmitting = false;
-                        return;
-                    }
-                    customConfirm('Are you sure you want to delete this role?', function(confirmed) {
-                        if (confirmed) {
-                            $.ajax({
-                                url: 'manage_users.php',
-                                type: 'POST',
-                                data: {
-                                    action: 'delete_role',
-                                    existing_role: existingRole
-                                },
-                                success: function(response) {
-                                    var data = JSON.parse(response);
-                                    if (data.success) {
-                                        console.log('Role Deleted:', response);
-                                        refreshRolesDropdown();
-                                        refreshUserDropdown(); // Refresh users as well since a role was deleted
-                                        customMessage('Role deleted successfully');
-                                    } else {
-                                        console.error('Role Deletion Failed:', data.message);
-                                        customMessage(data.message);
-                                    }
-                                },
-                                error: function(xhr, status, error) {
-                                    console.error('Error deleting role:', error);
-                                    if (xhr.responseText) {
-                                        console.error('Server Response:', xhr.responseText);
-                                    }
-                                    customMessage('An error occurred while deleting the role. Please try again or contact support.');
-                                },
-                                complete: function() {
-                                    isSubmitting = false;
-                                }
-                            });
-                        } else {
-                            isSubmitting = false; // Reset flag if user cancels deletion
-                        }
-                    });
-                }
-            });
-
-            // Bind the change event for the existing_role dropdown in JavaScript
+            // Event listeners for role management form
             document.getElementById('existing_role').addEventListener('change', function() {
                 var selectedRole = this.value;
-                loadRolePermissions(selectedRole);
-                loadRoleDetails(selectedRole);
+                if (selectedRole) {
+                    loadRoleDetails(selectedRole);
+                    loadRolePermissions(selectedRole);
+                }
             });
 
             function loadRolePermissions(roleName) {
-                clearPermissions(); // Clear any previously checked permissions
+                clearPermissions();
                 $.ajax({
                     url: 'manage_users.php',
                     type: 'POST',
@@ -1188,16 +899,15 @@ function deleteRole($conn, $role_name)
                         role_name: roleName
                     },
                     success: function(response) {
-                        var data = JSON.parse(response);
-                        if (data.success) {
-                            data.permissions.forEach(function(permId) {
+                        if (response.success) {
+                            response.permissions.forEach(function(permId) {
                                 var checkbox = document.getElementById('perm_' + permId);
                                 if (checkbox) {
                                     checkbox.checked = true;
                                 }
                             });
                         } else {
-                            console.error('Failed to load permissions:', data.message);
+                            console.error('Failed to load permissions:', response.message);
                         }
                     },
                     error: function(xhr, status, error) {
@@ -1211,6 +921,136 @@ function deleteRole($conn, $role_name)
                     checkbox.checked = false;
                 });
             }
+
+            document.getElementById('manageRolesForm').addEventListener('submit', function(event) {
+                event.preventDefault();
+                var action = document.getElementById('role_action').value;
+                var roleName = document.getElementById('new_role_name').value.trim();
+                var roleDescription = document.getElementById('new_role_description').value.trim();
+                var existingRole = document.getElementById('existing_role').value;
+                var permissions = Array.from(document.querySelectorAll('input[name="permissions[]"]:checked:not([disabled])')).map(checkbox => checkbox.value);
+
+                if (action === 'add') {
+                    if (roleName === '' || roleDescription === '') {
+                        displayMessage('Please provide both a name and description for the new role.', 'error');
+                        return;
+                    }
+                    $.ajax({
+                        url: 'manage_users.php',
+                        type: 'POST',
+                        data: {
+                            action: 'add_role',
+                            name: roleName,
+                            description: roleDescription,
+                            permissions: permissions
+                        },
+                        success: function(response) {
+                            if (response.success) {
+                                displayMessage(response.message, 'success');
+                                refreshRolesDropdown();
+                            } else {
+                                displayMessage(response.message, 'error');
+                            }
+                        },
+                        error: function(xhr, status, error) {
+                            console.error('Error adding role:', error);
+                            displayMessage('An error occurred while adding the role. Please try again or contact support.', 'error');
+                        }
+                    });
+                } else if (action === 'edit') {
+                    if (!existingRole || roleName === '' || roleDescription === '') {
+                        displayMessage('Please select a role and provide both a name and description.', 'error');
+                        return;
+                    }
+                    $.ajax({
+                        url: 'manage_users.php',
+                        type: 'POST',
+                        data: {
+                            action: 'edit_role',
+                            name: roleName,
+                            description: roleDescription,
+                            existing_role: existingRole,
+                            permissions: permissions
+                        },
+                        success: function(response) {
+                            if (response.success) {
+                                displayMessage(response.message, 'success');
+                                refreshRolesDropdown();
+                            } else {
+                                displayMessage(response.message, 'error');
+                            }
+                        },
+                        error: function(xhr, status, error) {
+                            console.error('Error editing role:', error);
+                            displayMessage('An error occurred while editing the role. Please try again or contact support.', 'error');
+                        }
+                    });
+                } else if (action === 'delete') {
+                    if (!existingRole) {
+                        displayMessage('Please select a role to delete.', 'error');
+                        return;
+                    }
+                    customConfirm('Are you sure you want to delete this role?', function(confirmed) {
+                        if (confirmed) {
+                            $.ajax({
+                                url: 'manage_users.php',
+                                type: 'POST',
+                                data: {
+                                    action: 'delete_role',
+                                    existing_role: existingRole
+                                },
+                                success: function(response) {
+                                    if (response.success) {
+                                        displayMessage(response.message, 'success');
+                                        refreshRolesDropdown();
+                                    } else {
+                                        displayMessage(response.message, 'error');
+                                    }
+                                },
+                                error: function(xhr, status, error) {
+                                    console.error('Error deleting role:', error);
+                                    displayMessage('An error occurred while deleting the role. Please try again or contact support.', 'error');
+                                }
+                            });
+                        }
+                    });
+                }
+            });
+
+            function refreshRolesDropdown() {
+                $.ajax({
+                    url: 'manage_users.php',
+                    type: 'POST',
+                    data: {
+                        action: 'get_roles'
+                    },
+                    success: function(response) {
+                        if (response.success) {
+                            var roleSelect = document.getElementById('existing_role');
+                            roleSelect.innerHTML = '<option value="">Select Role</option>';
+                            response.roles.forEach(function(role) {
+                                if (role !== 'Admin') {
+                                    var option = document.createElement('option');
+                                    option.value = role;
+                                    option.text = role;
+                                    roleSelect.appendChild(option);
+                                }
+                            });
+                        } else {
+                            console.error('Failed to refresh roles:', response.message);
+                        }
+                    },
+                    error: function(xhr, status, error) {
+                        console.error('Error refreshing roles:', error);
+                    }
+                });
+            }
+
+ 
+
+            // Initial refresh for both dropdown and table
+            refreshUsersTable();
+            refreshRolesDropdown();
         });
     </script>
 </body>
