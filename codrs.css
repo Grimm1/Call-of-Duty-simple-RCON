@@ -166,7 +166,7 @@ th {
 #game_type_table th, #game_type_table td,
 #map_table th, #map_table td,
 #users_table th, #users_table td {
-    padding: 2px;
+    padding: 2px 2px 2px 6px;
     border: 1px solid var(--table-border);
     height: 30px;
     background-color: var(--form-bg);
