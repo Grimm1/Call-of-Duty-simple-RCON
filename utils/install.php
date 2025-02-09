@@ -282,7 +282,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
                     ['mp_harbor', 'Harbor', 'coduo'],
                     ['mp_hurtgen', 'Hurtgen', 'coduo'],
                     ['mp_neuville', 'Neuville', 'coduo'],
-                    ['mp_pavlov', 'Pavlov', 'coduoo'],
+                    ['mp_pavlov', 'Pavlov', 'coduo'],
                     ['mp_powcamp', 'POW Camp', 'coduo'],
                     ['mp_railyard', 'Railyard', 'coduo'],
                     ['mp_rocket', 'Rocket', 'coduo'],
