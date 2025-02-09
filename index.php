@@ -547,7 +547,7 @@ if ($selectedServerId === 0 && $result->num_rows > 0) {
         var placeholder = document.getElementById('fastRestartPlaceholder');
         var button = placeholder.querySelector('button');
 
-        if (serverType === "cod") {
+        if (serverType === "cod" || serverType === "coduo") {
             if (button) {
                 button.remove(); // Remove the button if it exists and type is 'cod'
             }
