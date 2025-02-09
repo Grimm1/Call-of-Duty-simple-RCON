@@ -211,6 +211,665 @@ th {
 /* Specific styles for #users_table */
 #users_table th:nth-child(1),
 #users_table td:nth-child(1) {
+    width: 30%;
+
+}
+
+#users_table th:nth-child(2),
+#users_table td:nth-child(2) {
+    width: 30%;
+
+}
+
+#users_table th:nth-child(3),
+#users_table td:nth-child(3) {
+    width: 15%;
+
+}
+#users_table th:nth-child(4),
+#users_table td:nth-child(4) {
+    width: 20%;
+
+}
+.container, .third-container {
+    max-width: 600px;
+    margin: 10px;
+    padding: 10px 20px;
+    background-color: var(--form-bg);
+    border-radius: 8px;
+    box-shadow: var(--shadow);
+}
+
+.container-players {
+    width: 300px;
+    margin-left: 10px;
+    padding: 5px 7px;
+    background-color: var(--form-bg);
+    border-radius: 8px;
+    box-shadow: var(--shadow);
+    float: left;
+}
+
+.container-players-right {
+    width: 280px;
+    margin-right: 10px;
+    padding: 10px 20px;
+    background-color: var(--form-bg);
+    border-radius: 8px;
+    box-shadow: var(--shadow);
+    float: right;
+}
+
+.map-aliases-container {
+    width: 200px;
+    margin-left: 10px;
+    padding: 5px 7px;
+    background-color: var(--form-bg);
+    border-radius: 8px;
+    box-shadow: var(--shadow);
+    float: left;
+}
+
+.map-rotation-editor {
+    width: 370px;
+    margin-right: 10px;
+    padding: 10px 20px;
+    background-color: var(--form-bg);
+    border-radius: 8px;
+    box-shadow: var(--shadow);
+    float: right;
+}
+
+.container-players-right span#current_map,
+.container-players-right span#current_game_name,
+.container-players-right span#current_gametype {
+    color: #007bff;
+}
+
+.container-players-right p {
+    text-align: left;
+    font-size: 12px;
+    font-weight: bold;
+    color: var(--text-color);
+}
+
+.page-container {
+    display: flex;
+    flex-direction: column;
+    min-height: 100vh;
+    width: 660px;
+    margin: 0 auto;
+}
+
+.controls, .refresh-controls {
+    display: flex;
+    margin: 5px 0;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.refresh-controls {
+    justify-content: flex-end;
+}
+
+.refresh-controls select {
+    width: 60px;
+    align-items: flex-end;
+}
+
+.buttons {
+    float: right;
+    margin-top: -90px;
+    text-align: right;
+}
+
+.kick-controls, .map-controls {
+    display: flex;
+    align-items: center;
+    margin-top: 10px;
+}
+
+.output-window, .control-group, .button-group {
+    margin-top: 10px;
+}
+
+.control-group, .button-group {
+    display: flex;
+    align-items: center;
+}
+
+.message {
+    padding: 20px;
+    margin: 10px;
+    border: 1px solid var(--table-border);
+    background-color: var(--message-bg);
+    border-radius: 5px;
+}
+
+.message.success {
+    border-color: var(--message-success-border);
+    color: var(--message-success-border);
+}
+
+.message.error {
+    border-color: var(--message-error-border);
+    color: var(--message-error-border);
+}
+
+.separator {
+    border: none;
+    border-top: 1px solid var(--table-border);
+    margin: 20px 0;
+}
+
+.small-button {
+    font-size: 0.7em;
+    padding: 2px 4px;
+    margin: 2px;
+}
+
+#confirm-dialog, #message-dialog {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background-color: rgba(0, 0, 0, 0.5);
+    z-index: 1000;
+}
+
+#confirm-content, #message-content {
+    background: var(--form-bg);
+    padding: 20px;
+    border-radius: 5px;
+    text-align: center;
+    box-shadow: var(--shadow);
+}
+
+#confirm-yes, #confirm-no, #message-ok {
+    margin: 10px 5px;
+    padding: 5px 15px;
+    background-color: var(--button-bg);
+    color: white;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+}
+
+#confirm-yes:hover, #confirm-no:hover, #message-ok:hover {
+    background-color: var(--button-hover-bg);
+}
+
+textarea#map_data {
+    width: 584px;
+    height: 200px;
+    margin-bottom: 10px;
+    overflow-y: auto;
+    resize: none;
+    background-color: var(--form-bg);
+    color: var(--text-color);
+}
+
+#output_box {
+    background-color: black;
+    color: white;
+    height: 5em;
+    overflow-y: auto;
+    padding: 10px;
+    margin-top: 20px;
+    border-radius: 8px;
+    font-size: xx-small;
+    white-space: pre-wrap;
+    transition: height 0.3s ease;
+}
+
+#output_box.expanded {
+    height: 20em;
+}
+
+.delete-map-button {
+    background-color: var(--button-bg);
+    color: white;
+    border: none;
+    padding: 5px 10px;
+    cursor: pointer;
+}
+
+.delete-map-button:hover {
+    background-color: #c0392b;
+}
+
+.menu ul {
+    padding: 0;
+    margin: 0;
+}
+
+.menu ul a {
+    font-size: 12px;
+    display: block;
+    text-decoration: none;
+    color: var(--link-color);
+    margin-bottom: 0;
+}
+
+.menu ul li {
+    margin-bottom: 2px;
+}
+
+.menu ul a.active {
+    font-weight: bold;
+}
+
+.buttons a {
+    display: block;
+    margin-bottom: 5px;
+}
+
+.map-aliases-table, .map-rotation-table {
+    width: 100%;
+    table-layout: fixed;
+    font-size: 0.8em;
+}
+
+.map-rotation-table td,
+.map-rotation-table th,
+.map-aliases-table td,
+.map-aliases-table th {
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    padding: 2px;
+    border: 1px solid var(--table-border);
+}
+
+.map-rotation-table th,
+.map-aliases-table th {
+    font-weight: bold;
+}
+
+.name-column {
+    width: 100px;
+}
+
+.action-column {
+    width: 20%;
+    white-space: nowrap;
+}
+
+.action-column button {
+    margin-right: 4px;
+    box-sizing: border-box;
+    font-size: 0.7em;
+}
+
+.add-button {
+    margin-top: 10px;
+    text-align: right;
+}
+
+.map-aliases-table th:nth-child(1),
+.map-aliases-table td:nth-child(1) {
+    width: 80%;
+}
+
+.map-aliases-table th:nth-child(2),
+.map-aliases-table td:nth-child(2) {
+    width: 20%;
+    text-align: center;
+    padding: 0px;
+}
+
+.map-rotation-table td, .map-rotation-table th {
+    padding: 0px;
+    border: 1px solid var(--table-border);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.map-rotation-table .name-column {
+    width: 100px;
+}
+
+.map-rotation-table .action-column {
+    width: 20%;
+    white-space: nowrap;
+}
+
+.map-rotation-table .action-column button {
+    width: calc(45% - 4px);
+    margin-right: 4px;
+    box-sizing: border-box;
+    font-size: 0.7em;
+}
+
+.rotation-details-table {
+    font-size: 12px;
+    padding: 0px;
+}
+
+.rotation-details-table th {
+    font-size: 12px;
+}
+
+.rotation-details-table td, 
+.rotation-details-table input[type="text"], 
+.rotation-details-table select {
+    font-size: 12px;
+    padding: 2px;
+    background-color: var(--form-bg);
+    color: var(--text-color);
+}
+
+.rotation-details-table .small-button {
+    font-size: 12px;
+}
+
+.container {
+    position: relative;
+}
+
+.container-footer {
+    max-width: 600px;
+    padding: 10px 20px;
+    background-color: var(--form-bg);
+    border-radius: 8px;
+    box-shadow: var(--shadow);
+}
+
+footer {
+    margin-top: auto;
+    padding: 10px;
+    text-align: center;
+    font-size: 0.8em;
+}
+
+footer p {
+    color: var(--footer-text-color);
+}
+
+@media (prefers-color-scheme: dark) {
+    .container,
+    .container-players,
+    .container-players-right,
+    .container-footer,
+    .third-container {
+        box-shadow: none;
+    }
+}
+
+.file-input-container {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-top: 10px;
+}
+
+.custom-file-input {
+    display: flex;
+    align-items: center;
+    flex-grow: 0;
+    margin: 0 5px;
+}
+
+.file-input-style {
+    display: none;
+}
+
+.file-input-label {
+    font-family: inherit;
+    font-size: small;
+    background: var(--button-bg);
+    color: white;
+    border: 1px solid var(--button-bg);
+    border-radius: 4px;
+    padding: 5px 8px;
+    cursor: pointer;
+    margin-right: 10px;
+}
+
+.file-input-label:hover {
+    background-color: var(--button-hover-bg);
+}
+
+.file-chosen {
+    font-size: small;
+    color: var(--text-color);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 150px;
+}
+
+.file-input-container button {
+    font-size: small;
+    padding: 5px 10px;
+    background-color: var(--button-bg);
+    color: white;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+}
+
+.file-input-container button:hover {
+    background-color: var(--button-hover-bg);
+}
+:root {
+    --bg-color: #f4f4f4;
+    --text-color: #333;
+    --link-color: #4CAF50;
+    --button-bg: #4CAF50;
+    --button-hover-bg: #3a3a3a;
+    --form-bg: #fff;
+    --table-border: #999;
+    --table-header-bg: #f2f2f2;
+    --table-even-row-bg: #f9f9f9;
+    --table-hover-bg: #f1f1f1;
+    --shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+    --alt-bg: #e0e0e0;
+    --message-bg: #e9ffe9;
+    --message-success-border: #4caf50;
+    --message-error-border: #f44336;
+    --footer-border: #ccc;
+    --footer-text-color: #333;
+    --footer-bg: #f1f1f1;
+}
+
+@media (prefers-color-scheme: dark) {
+    :root {
+        --bg-color: #1a1a1a;
+        --text-color: #e0e0e0;
+        --link-color: #4CAF50;
+        --button-bg: #4CAF50;
+        --button-hover-bg: #585858;
+        --form-bg: #2b2b2b;
+        --table-border: #444;
+        --table-header-bg: #333;
+        --table-even-row-bg: #282828;
+        --table-hover-bg: #222;
+        --shadow: 0 0 10px rgba(255, 255, 255, 0.1);
+        --alt-bg: #383838;
+        --message-bg: #1e3e1e;
+        --message-success-border: #4caf50;
+        --message-error-border: #f44336;
+        --footer-border: #444;
+        --footer-text-color: #e0e0e0;
+        --footer-bg: #2b2b2b;
+    }
+}
+
+html {
+    overflow-y: scroll;
+}
+
+body {
+    font-family: Arial, sans-serif;
+    background-color: var(--bg-color);
+    color: var(--text-color);
+    margin: 0;
+    padding: 0;
+}
+
+#branding {
+    background-image: url('gamevars/srcon_banner.png');
+    background-size: 100% 100%;
+    background-position: center;
+    background-repeat: no-repeat;
+    height: 120px;
+    padding: 0px;
+}
+
+h1, h2 {
+    color: var(--text-color);
+}
+
+.subtitle {
+    font-size: small;
+    color: gray;
+    margin-top: -10px;
+}
+
+a {
+    color: var(--link-color);
+    text-decoration: none;
+}
+
+a:hover {
+    text-decoration: underline;
+}
+
+form, .server-form {
+    margin: 5px 0;
+    background-color: var(--form-bg);
+    padding: 10px;
+    border-radius: 8px;
+    box-shadow: var(--shadow);
+}
+
+label, .server-form label {
+    display: block;
+    font-size: small;
+    white-space: nowrap;
+}
+
+input[type="text"], input[type="number"], input[type="email"], input[type="password"], select,
+.server-form input[type="text"], .server-form input[type="number"], .server-form input[type="password"], .server-form select {
+    width: 90%;
+    padding: 4px;
+    border: 1px solid var(--table-border);
+    border-radius: 4px;
+    background-color: var(--form-bg);
+    color: var(--text-color);
+}
+
+input[type="submit"], button, .server-form input[type="submit"], .server-form button {
+    font-size: small;
+    padding: 5px 10px;
+    background-color: var(--button-bg);
+    color: white;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    margin: 2px;
+}
+
+#deleteUserBtn {
+    font-size: small;
+    padding: 5px 10px;
+    background-color: var(--button-bg);
+    color: white;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    margin: 2px;
+}
+
+input[type="submit"]:hover, button:hover, .server-form input[type="submit"]:hover, .server-form button:hover {
+    background-color: var(--button-hover-bg);
+}
+
+/* General table styles */
+table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 20px 0;
+}
+
+table, th, td {
+    border: 1px solid var(--table-border);
+}
+
+th, td {
+    padding: 12px;
+    text-align: left;
+    color: var(--text-color);
+}
+
+th {
+    background-color: var(--table-header-bg);
+}
+
+/* Grouped table styles */
+#player_table, #servers_table, #game_type_table, #map_table, #users_table {
+    width: 100%;
+    margin-top: 5px;
+    font-size: small;
+    box-shadow: var(--shadow);
+}
+
+#player_table th, #player_table td,
+#servers_table th, #servers_table td,
+#game_type_table th, #game_type_table td,
+#map_table th, #map_table td,
+#users_table th, #users_table td {
+    padding: 2px 2px 2px 6px;
+    border: 1px solid var(--table-border);
+    height: 30px;
+    background-color: var(--form-bg);
+}
+
+#player_table th:nth-child(odd),
+#servers_table th:nth-child(odd),
+#game_type_table th:nth-child(odd),
+#map_table th:nth-child(odd),
+#users_table th:nth-child(odd) {
+    background-color: var(--alt-bg);
+    color: var(--text-color);
+    font-weight: bold;
+}
+
+#player_table th:nth-child(even),
+#servers_table th:nth-child(even),
+#game_type_table th:nth-child(even),
+#map_table th:nth-child(even),
+#users_table th:nth-child(even) {
+    background-color: var(--table-header-bg);
+    color: var(--text-color);
+    font-weight: bold;
+}
+
+#player_table tr:nth-child(even),
+#servers_table tr:nth-child(even),
+#game_type_table tr:nth-child(even),
+#map_table tr:nth-child(even),
+#users_table tr:nth-child(even) {
+    background-color: var(--table-even-row-bg);
+}
+
+#player_table tr:hover,
+#servers_table tr:hover,
+#game_type_table tr:hover,
+#map_table tr:hover,
+#users_table tr:hover {
+    background-color: var(--table-hover-bg);
+}
+
+/* Specific styles for #users_table */
+#users_table th:nth-child(1),
+#users_table td:nth-child(1) {
     width: 45%;
 
 }
