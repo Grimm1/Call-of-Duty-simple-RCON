@@ -360,44 +360,46 @@ function addRole($conn, $name, $description, $permissions)
         }
 
         error_log("Role '$name' does not exist, proceeding with insert");
-        $stmt = $conn->prepare("INSERT INTO roles (name, description) VALUES (?, ?)");
-        if ($stmt) {
-            $stmt->bind_param("ss", $name, $description);
-            if ($stmt->execute()) {
-                $role_id = $stmt->insert_id;
+        $insert_stmt = $conn->prepare("INSERT INTO roles (name, description) VALUES (?, ?)");
+        if ($insert_stmt) {
+            $insert_stmt->bind_param("ss", $name, $description);
+            if ($insert_stmt->execute()) {
+                $role_id = $insert_stmt->insert_id;
                 error_log("Role '$name' added successfully, role_id: $role_id");
+                $insert_stmt->close(); // Close the insert statement
+
                 foreach ($permissions as $perm_id) {
-                    $insert_stmt = $conn->prepare("INSERT INTO role_permissions (role_id, permission_id) VALUES (?, ?)");
-                    if ($insert_stmt) {
-                        $insert_stmt->bind_param("ii", $role_id, $perm_id);
-                        if (!$insert_stmt->execute()) {
-                            error_log("Failed to add permission '$perm_id' for role '$name': " . htmlspecialchars($insert_stmt->error));
-                            throw new Exception('Failed to add permissions: ' . htmlspecialchars($insert_stmt->error));
+                    $perm_stmt = $conn->prepare("INSERT INTO role_permissions (role_id, permission_id) VALUES (?, ?)");
+                    if ($perm_stmt) {
+                        $perm_stmt->bind_param("ii", $role_id, $perm_id);
+                        if (!$perm_stmt->execute()) {
+                            error_log("Failed to add permission '$perm_id' for role '$name': " . htmlspecialchars($perm_stmt->error));
+                            throw new Exception('Failed to add permissions: ' . htmlspecialchars($perm_stmt->error));
                         }
-                        $insert_stmt->close();
+                        $perm_stmt->close(); // Close each permission statement
                     } else {
                         error_log("Failed to prepare statement for adding permissions for role '$name'");
                         throw new Exception('Failed to prepare statement for adding permissions.');
                     }
                 }
 
-                $stmt = $conn->prepare("SELECT name FROM roles");
-                if ($stmt) {
-                    $stmt->execute();
-                    $result = $stmt->get_result();
+                // Fetch updated roles
+                $fetch_stmt = $conn->prepare("SELECT name FROM roles");
+                if ($fetch_stmt) {
+                    $fetch_stmt->execute();
+                    $result = $fetch_stmt->get_result();
                     $roles = [];
                     while ($row = $result->fetch_assoc()) {
                         $roles[] = $row['name'];
                     }
-                    $stmt->close();
+                    $fetch_stmt->close(); // Close the fetch statement
                 }
                 header('Content-Type: application/json');
                 echo json_encode(['success' => true, 'message' => 'Role added successfully!', 'roles' => $roles]);
             } else {
-                error_log("Failed to add role '$name': " . htmlspecialchars($stmt->error));
-                throw new Exception('Failed to add role: ' . htmlspecialchars($stmt->error));
+                error_log("Failed to add role '$name': " . htmlspecialchars($insert_stmt->error));
+                throw new Exception('Failed to add role: ' . htmlspecialchars($insert_stmt->error));
             }
-            $stmt->close();
         } else {
             error_log("Failed to prepare statement for adding role '$name'");
             throw new Exception('Failed to prepare statement for adding role.');
@@ -414,51 +416,52 @@ function editRole($conn, $name, $description, $role_name, $permissions = null)
 {
     try {
         // First, fetch the role_id for the existing role
-        $role_id_stmt = $conn->prepare("SELECT id FROM roles WHERE name = ?");
-        $role_id_stmt->bind_param("s", $role_name);
-        $role_id_stmt->execute();
-        $role_id_result = $role_id_stmt->get_result();
+        $fetch_role_id_stmt = $conn->prepare("SELECT id FROM roles WHERE name = ?");
+        $fetch_role_id_stmt->bind_param("s", $role_name);
+        $fetch_role_id_stmt->execute();
+        $role_id_result = $fetch_role_id_stmt->get_result();
 
         if ($role_id_result && $role_id_row = $role_id_result->fetch_assoc()) {
             $role_id = $role_id_row['id'];
-            $role_id_stmt->close();
+            $fetch_role_id_stmt->close(); // Close the statement used to fetch role ID
 
             // Update the role name and description
-            $stmt = $conn->prepare("UPDATE roles SET name = ?, description = ? WHERE id = ?");
-            if ($stmt) {
-                $stmt->bind_param("ssi", $name, $description, $role_id);
-                if ($stmt->execute()) {
+            $update_role_stmt = $conn->prepare("UPDATE roles SET name = ?, description = ? WHERE id = ?");
+            if ($update_role_stmt) {
+                $update_role_stmt->bind_param("ssi", $name, $description, $role_id);
+                if ($update_role_stmt->execute()) {
                     // Clear existing permissions for this role
-                    $delete_stmt = $conn->prepare("DELETE FROM role_permissions WHERE role_id = ?");
-                    $delete_stmt->bind_param("i", $role_id);
-                    $delete_stmt->execute();
-                    $delete_stmt->close();
+                    $delete_permissions_stmt = $conn->prepare("DELETE FROM role_permissions WHERE role_id = ?");
+                    $delete_permissions_stmt->bind_param("i", $role_id);
+                    $delete_permissions_stmt->execute();
+                    $delete_permissions_stmt->close(); // Close the statement after deleting permissions
 
                     // Add new permissions only if permissions are provided
                     if (is_array($permissions) && !empty($permissions)) {
                         foreach ($permissions as $perm_id) {
-                            $insert_stmt = $conn->prepare("INSERT INTO role_permissions (role_id, permission_id) VALUES (?, ?)");
-                            if ($insert_stmt) {
-                                $insert_stmt->bind_param("ii", $role_id, $perm_id);
-                                if (!$insert_stmt->execute()) {
-                                    throw new Exception('Failed to add permission ' . $perm_id . ': ' . htmlspecialchars($insert_stmt->error));
+                            $insert_permission_stmt = $conn->prepare("INSERT INTO role_permissions (role_id, permission_id) VALUES (?, ?)");
+                            if ($insert_permission_stmt) {
+                                $insert_permission_stmt->bind_param("ii", $role_id, $perm_id);
+                                if (!$insert_permission_stmt->execute()) {
+                                    throw new Exception('Failed to add permission ' . $perm_id . ': ' . htmlspecialchars($insert_permission_stmt->error));
                                 }
-                                $insert_stmt->close();
+                                $insert_permission_stmt->close(); // Close each insert statement
                             } else {
                                 throw new Exception('Failed to prepare statement for adding permission ' . $perm_id);
                             }
                         }
                     }
 
-                    $stmt = $conn->prepare("SELECT name FROM roles");
-                    if ($stmt) {
-                        $stmt->execute();
-                        $result = $stmt->get_result();
+                    // Fetch updated roles
+                    $fetch_roles_stmt = $conn->prepare("SELECT name FROM roles");
+                    if ($fetch_roles_stmt) {
+                        $fetch_roles_stmt->execute();
+                        $result = $fetch_roles_stmt->get_result();
                         $roles = [];
                         while ($row = $result->fetch_assoc()) {
                             $roles[] = $row['name'];
                         }
-                        $stmt->close();
+                        $fetch_roles_stmt->close(); // Close the statement after fetching roles
                     }
 
                     header('Content-Type: application/json');
@@ -468,9 +471,9 @@ function editRole($conn, $name, $description, $role_name, $permissions = null)
                         'roles' => $roles
                     ]);
                 } else {
-                    throw new Exception('Failed to update role: ' . htmlspecialchars($stmt->error));
+                    throw new Exception('Failed to update role: ' . htmlspecialchars($update_role_stmt->error));
                 }
-                $stmt->close();
+                $update_role_stmt->close(); // Close the update statement
             } else {
                 throw new Exception('Failed to prepare statement for updating role.');
             }
