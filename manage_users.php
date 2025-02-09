@@ -593,7 +593,9 @@ function deleteRole($conn, $role_name)
                         </div>
                         <div class="form-group">
                             <label for="password">Password:</label>
-                            <input type="password" id="password" name="password" placeholder="Enter new password to change (leave blank to keep current)">
+                            <div class="form-group">
+                                <input type="password" id="password" name="password" placeholder="Password">
+                            </div>
                         </div>
                         <div class="form-group">
                             <label for="role">Role:</label>
@@ -708,6 +710,7 @@ function deleteRole($conn, $role_name)
                         document.getElementById('username').value = response.username;
                         document.getElementById('email').value = response.email || '';
                         document.getElementById('password').value = ''; // Clear password for security reasons
+                        document.getElementById('password').placeholder = 'Enter new password to change (leave blank to keep current)';
                         document.getElementById('role').value = response.role;
                         document.getElementById('user_id').value = userId;
                         document.getElementById('userFormSubmit').value = 'Save Changes';
@@ -739,7 +742,8 @@ function deleteRole($conn, $role_name)
             document.getElementById('username').name = "username";
             document.getElementById('email').name = "email";
             document.getElementById('password').name = "password";
-            document.getElementById('password').disabled = false; // Password can be required for new users
+            document.getElementById('password').placeholder = "Password"; // Reset placeholder for adding new user
+            document.getElementById('password').disabled = false; // Password might be required for new users
         }
 
         $('#userForm').submit(function(e) {
