@@ -242,7 +242,8 @@ $game_names = [
     'cod' => 'Call of Duty',
     'cod2' => 'Call of Duty 2',
     'cod4' => 'Call of Duty 4',
-    'codwaw' => 'Call of Duty: World at War'
+    'codwaw' => 'Call of Duty: World at War',
+    'coduo' => 'Call of Duty: United Offensive'
 ];
 
 function sendRconCommand($serverId, $command)
@@ -305,7 +306,8 @@ function mapGameNameToType($gameName)
         'Call of Duty' => 'cod',
         'Call of Duty 2' => 'cod2',
         'Call of Duty 4' => 'cod4',
-        'Call of Duty: World at War' => 'codwaw'
+        'Call of Duty: World at War' => 'codwaw',
+        'CoD:United Offensive' => 'coduo'
     ];
     return $gameMap[$gameName] ?? null;
 }
@@ -348,7 +350,7 @@ function updateGametypes($conn, $server_id, $server_type)
     }
     $stmt->close();
 }
-$game_names_json = '{"cod":"Call of Duty","cod2":"Call of Duty 2","cod4":"Call of Duty 4","codwaw":"Call of Duty: WaW"}';
+$game_names_json = '{"cod":"Call of Duty","cod2":"Call of Duty 2","cod4":"Call of Duty 4","codwaw":"Call of Duty: WaW","coduo":"Call of Duty: UO"}';
 ?>
 
 <!DOCTYPE html>
