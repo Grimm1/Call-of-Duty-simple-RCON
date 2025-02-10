@@ -25,12 +25,12 @@ $selectedServerId = isset($_SESSION['selected_server_id']) ? intval($_SESSION['s
 // Attempt to include and connect to the database
 try {
     include __DIR__ . '/config/database.php';
-    
+
     // Check if connection was successful
     if (!$conn) {
         throw new Exception("Database connection failed.");
     }
-    
+
     $sql = "SELECT id, server_name, ip_or_hostname, port, rcon_password, server_type FROM game_servers";
     $result = $conn->query($sql);
 
@@ -450,49 +450,56 @@ if ($selectedServerId === 0 && $result->num_rows > 0) {
 
     // Function to apply map rotation
     function applyMapRotation() {
-    var serverId = document.getElementById('server').value;
-    var rotationSelect = document.getElementById('map_rotation_select');
-    var selectedRotationId = rotationSelect.value; // Get the selected rotation id
+        var serverId = document.getElementById('server').value;
+        var rotationSelect = document.getElementById('map_rotation_select');
+        var selectedRotationId = rotationSelect.value; // Get the selected rotation id
 
-    if (selectedRotationId === "") {
-        customMessage("Please select a map rotation.");
-        return;
-    }
-
-    var selectedRotationName = rotationSelect.options[rotationSelect.selectedIndex].text;
-    
-    // Use customConfirm to ask for confirmation before proceeding
-    customConfirm("Apply the map rotation: " + selectedRotationName + "?", function(confirm) {
-        if (confirm) {
-            // Fetch rotation string from server based on selected rotation ID
-            var xhr = new XMLHttpRequest();
-            xhr.open('POST', 'functions/getRotationString.php', true);
-            xhr.setRequestHeader('Content-Type', 'application/x-www-form-urlencoded');
-            xhr.onload = function() {
-                if (this.status == 200) {
-                    var rotationString = this.responseText;
-                    if (rotationString) {
-                        // Step 1: Set the rotation
-                        var setRotationCommand = 'set sv_maprotationcurrent "' + rotationString + '"';
-                        
-                        // Step 2: After setting rotation, send map_rotate command
-                        sendRconCommandForRotation(setRotationCommand, serverId, function() {
-                            var mapRotateCommand = 'map_rotate';
-                            sendRconCommandForRotation(mapRotateCommand, serverId, function() {
-                                // Step 3: Refresh server info after map rotation
-                                queryServerInfo(serverId);
-                                customMessage("Map rotation applied and map rotated", null);
-                            });
-                        });
-                    } else {
-                        customMessage('Failed to retrieve rotation string.');
-                    }
-                }
-            };
-            xhr.send('rotationId=' + selectedRotationId); // Send rotation id to get the correct rotation string
+        if (selectedRotationId === "") {
+            customMessage("Please select a map rotation.");
+            return;
         }
-    });
-}
+
+        var selectedRotationName = rotationSelect.options[rotationSelect.selectedIndex].text;
+
+        // Use customConfirm to ask for confirmation before proceeding
+        customConfirm("Apply the map rotation: " + selectedRotationName + "?", function(confirm) {
+            if (confirm) {
+                // Fetch rotation string from server based on selected rotation ID
+                var xhr = new XMLHttpRequest();
+                xhr.open('POST', 'functions/getRotationString.php', true);
+                xhr.setRequestHeader('Content-Type', 'application/x-www-form-urlencoded');
+                xhr.onload = function() {
+                    if (this.status == 200) {
+                        var rotationString = this.responseText;
+                        if (rotationString) {
+                            // Step 1: Set sv_maprotation
+                            var mapRotationCommand = 'sv_maprotation "' + rotationString + '"';
+
+                            sendRconCommandForRotation(mapRotationCommand, serverId, function() {
+                                setTimeout(function() {
+                                    var setRotationCommand = 'set sv_maprotationcurrent "' + rotationString + '"';
+                                    sendRconCommandForRotation(setRotationCommand, serverId, function() {
+                                        setTimeout(function() {
+                                            var mapRotateCommand = 'map_rotate';
+                                            sendRconCommandForRotation(mapRotateCommand, serverId, function() {
+                                                // Step 3: Refresh server info after map rotation
+                                                queryServerInfo(serverId);
+                                                customMessage("Map rotation applied, map rotation current set, and map restarted", null);
+                                            });
+                                        }, 1000); // Wait for 1 second (1000 milliseconds)
+                                    });
+                                }, 1000); // Wait for 1 second (1000 milliseconds)
+                            });
+                        } else {
+                            customMessage('Failed to retrieve rotation string.');
+                        }
+                    }
+                };
+                xhr.send('rotationId=' + selectedRotationId);
+            }
+        });
+
+    }
     // Ensure this function is defined correctly
     function sendRconCommandForRotation(command, serverId, callback) {
         var xhr = new XMLHttpRequest();
@@ -547,7 +554,7 @@ if ($selectedServerId === 0 && $result->num_rows > 0) {
         var placeholder = document.getElementById('fastRestartPlaceholder');
         var button = placeholder.querySelector('button');
 
-        if (serverType === "cod" || serverType === "coduo") {
+        if (serverType === "cod") {
             if (button) {
                 button.remove(); // Remove the button if it exists and type is 'cod'
             }
@@ -556,7 +563,9 @@ if ($selectedServerId === 0 && $result->num_rows > 0) {
                 // Create button if it doesn't exist and type is not 'cod'
                 button = document.createElement('button');
                 button.textContent = 'Fast Restart';
-                button.onclick = function() { confirmAndSendRCON('fast_restart'); };
+                button.onclick = function() {
+                    confirmAndSendRCON('fast_restart');
+                };
                 button.style.marginRight = '10px';
                 placeholder.appendChild(button);
             }
@@ -580,6 +589,7 @@ if ($selectedServerId === 0 && $result->num_rows > 0) {
 
 
     });
+
     function toggleOutputBoxSize() {
         var outputBox = document.getElementById('output_box');
         outputBox.classList.toggle('expanded');
