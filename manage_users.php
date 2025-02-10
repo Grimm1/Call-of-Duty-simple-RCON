@@ -1028,28 +1028,30 @@ function deleteRole($conn, $role_name)
                         displayMessage('Please select a role to delete.', 'error');
                         return;
                     }
-                    if (confirm('Are you sure you want to delete this role?')) {
-                        $.ajax({
-                            url: 'manage_users.php',
-                            type: 'POST',
-                            data: {
-                                action: 'delete_role',
-                                existing_role: existingRole
-                            },
-                            success: function(response) {
-                                if (response.success) {
-                                    displayMessage(response.message, 'success');
-                                    refreshRolesDropdown();
-                                } else {
-                                    displayMessage(response.message, 'error');
+                    customConfirm("Are you sure you want to delete this role?", function(confirmed) {
+                        if (confirmed) {
+                            $.ajax({
+                                url: 'manage_users.php',
+                                type: 'POST',
+                                data: {
+                                    action: 'delete_role',
+                                    existing_role: existingRole
+                                },
+                                success: function(response) {
+                                    if (response.success) {
+                                        displayMessage(response.message, 'success');
+                                        refreshRolesDropdown();
+                                    } else {
+                                        displayMessage(response.message, 'error');
+                                    }
+                                },
+                                error: function(xhr, status, error) {
+                                    console.error('Error deleting role:', error);
+                                    displayMessage('An error occurred while deleting the role. Please try again or contact support.', 'error');
                                 }
-                            },
-                            error: function(xhr, status, error) {
-                                console.error('Error deleting role:', error);
-                                displayMessage('An error occurred while deleting the role. Please try again or contact support.', 'error');
-                            }
-                        });
-                    }
+                            });
+                        }
+                    });
                 }
             });
 
@@ -1062,14 +1064,21 @@ function deleteRole($conn, $role_name)
                     },
                     success: function(response) {
                         if (response.success) {
-                            var roleSelect = document.getElementById('existing_role');
-                            roleSelect.innerHTML = '<option value="">Select Role</option>';
+                            var roleSelectUserForm = document.getElementById('role');
+                            var roleSelectManageRolesForm = document.getElementById('existing_role');
+
+                            // Clear existing options for both dropdowns
+                            roleSelectUserForm.innerHTML = '<option value="">Select Role</option>';
+                            roleSelectManageRolesForm.innerHTML = '<option value="">Select Role</option>';
+
+                            // Populate with new roles
                             response.roles.forEach(function(role) {
+                                var option = document.createElement('option');
+                                option.value = role;
+                                option.text = role;
+                                roleSelectUserForm.appendChild(option.cloneNode(true)); // Clone to avoid reference issues
                                 if (role !== 'Admin') {
-                                    var option = document.createElement('option');
-                                    option.value = role;
-                                    option.text = role;
-                                    roleSelect.appendChild(option);
+                                    roleSelectManageRolesForm.appendChild(option); // Only add non-Admin roles to manage roles form
                                 }
                             });
                         } else {
