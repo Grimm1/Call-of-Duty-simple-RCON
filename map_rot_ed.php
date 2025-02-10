@@ -439,7 +439,7 @@ while ($row = $aliasResult->fetch_assoc()) {
             }
 
             function updateAliasesTable(aliases) {
-                var tableHTML = '<table class="map-aliases-table"><thead><tr><th>Alias</th><th>Go</th></tr></thead><tbody>';
+                var tableHTML = '<table id="map-aliases-table" class="map-aliases-table"><thead><tr><th>Alias</th><th>Go</th></tr></thead><tbody>';
 
                 if (Object.keys(aliases).length > 0) {
                     for (var mapName in aliases) {
@@ -456,6 +456,59 @@ while ($row = $aliasResult->fetch_assoc()) {
 
                 tableHTML += '</tbody></table>';
                 document.querySelector('.map-aliases-container').innerHTML = '<h3>Map Aliases</h3>' + tableHTML;
+
+                // Apply some inline styles to ensure CSS is applied correctly
+                var table = document.getElementById('map-aliases-table');
+                if (table) {
+                    table.style.width = '100%'; // Ensure full width
+                    table.style.tableLayout = 'fixed'; // If fixed layout is needed
+
+                    // Apply styles to table cells
+                    var cells = table.querySelectorAll('th, td');
+                    cells.forEach(function(cell) {
+                        cell.style.padding = '2px 2px 2px 6px'; // Match CSS padding
+                        cell.style.border = '1px solid var(--table-border)'; // Match CSS border
+                        cell.style.height = '30px'; // Match CSS height
+                        cell.style.backgroundColor = 'var(--form-bg)'; // Match CSS background color
+                        cell.style.overflow = 'hidden'; // Match CSS overflow
+                        cell.style.textOverflow = 'ellipsis'; // Match CSS text overflow
+                        cell.style.whiteSpace = 'nowrap'; // Match CSS white space
+                    });
+
+                    // Style for odd headers
+                    var oddHeaders = table.querySelectorAll('th:nth-child(odd)');
+                    oddHeaders.forEach(function(header) {
+                        header.style.backgroundColor = 'var(--alt-bg)';
+                        header.style.color = 'var(--text-color)';
+                        header.style.fontWeight = 'bold';
+                    });
+
+                    // Style for even headers
+                    var evenHeaders = table.querySelectorAll('th:nth-child(even)');
+                    evenHeaders.forEach(function(header) {
+                        header.style.backgroundColor = 'var(--table-header-bg)';
+                        header.style.color = 'var(--text-color)';
+                        header.style.fontWeight = 'bold';
+                    });
+
+                    // Style for even rows
+                    var evenRows = table.querySelectorAll('tr:nth-child(even)');
+                    evenRows.forEach(function(row) {
+                        row.style.backgroundColor = 'var(--table-even-row-bg)';
+                    });
+
+                    // Hover effect
+                    table.addEventListener('mouseover', function(e) {
+                        if (e.target.tagName.toLowerCase() === 'tr') {
+                            e.target.style.backgroundColor = 'var(--table-hover-bg)';
+                        }
+                    });
+                    table.addEventListener('mouseout', function(e) {
+                        if (e.target.tagName.toLowerCase() === 'tr') {
+                            e.target.style.backgroundColor = '';
+                        }
+                    });
+                }
 
                 // Add event listener for adding maps to rotation
                 document.querySelectorAll('.map-aliases-container .add-to-rotation').forEach(button => {
@@ -687,7 +740,7 @@ while ($row = $aliasResult->fetch_assoc()) {
                     '</select></td>' +
                     '<td><button class="move-up small-button" title="Move Up">↑</button>' +
                     '<button class="move-down small-button" title="Move Down">↓</button>' +
-                    '<button class="delete-map small-button">Delete</button></td></tr>';
+                    '<button class="delete-map small-button">Del</button></td></tr>';
 
                 rightTableBody.insertAdjacentHTML('beforeend', newRow);
                 updateRowIndices(rightTableBody);

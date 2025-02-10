@@ -11,7 +11,7 @@ This tool supports multiple server management, map rotations, user management, a
 ## ⚙️ Features
 
 - **Full RCON Control**: Full administrative access for managing multiple Call of Duty servers.
-- **Multiple Game Support**: Works with servers from Call of Duty 1, 2, 4 and world at war.
+- **Multiple Game Support**: Works with servers from Call of Duty 1, UO, 2, 4 and world at war.
 - **Map Rotations**: Create and manage custom map rotations for your server.
 - **User Management**: Add, remove, and manage users with full control over their access and roles.
 - **Kick Users**: Easily kick disruptive players from the server.
@@ -47,8 +47,10 @@ This tool supports multiple server management, map rotations, user management, a
    ```text
    http://your-webserver.com/utils/install.php
    ```
+4.❗**Delete the installer**❗ 
+   Delete the file utils/install.php. This is important as it's a potential security risk.
 
-4. **Configure RCON Settings**:
+5. **Configure RCON Settings**:
    After installation, you can configure your RCON settings for each Call of Duty server you wish to manage. This includes adding server IPs, ports, and authentication details.
 
 ---
@@ -90,6 +92,8 @@ We welcome contributions! If you'd like to contribute to this project, feel free
 For support, feel free to open an issue on the [GitHub Issues page](https://github.com/Grimm1/Call-of-Duty-simple-RCON/issues), or ask questions in the repository discussions.
 
 ---
+## 🙋‍♂️ To Do
 
+Password reset functionality.
 
 Happy gaming and server management! 🎮
