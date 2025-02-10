@@ -236,32 +236,36 @@ function editUser($conn, $user_id, $new_username, $new_password, $new_email, $ne
         $sql = "UPDATE users SET ";
         $params = [];
         $types = "";
+        $setFields = [];
 
-        if ($new_username !== null) {
-            $sql .= "username = ?, ";
+        if ($new_username !== null && $new_username !== '') {
+            $setFields[] = "username = ?";
             $params[] = $new_username;
             $types .= "s";
         }
 
-        if ($new_password !== null) {
-            $new_password = password_hash($new_password, PASSWORD_BCRYPT);
-            $sql .= "password = ?, ";
-            $params[] = $new_password;
-            $types .= "s";
-        }
-
-        if ($new_email !== null) {
-            $sql .= "email = ?, ";
+        if ($new_email !== null && $new_email !== '') {
+            $setFields[] = "email = ?";
             $params[] = $new_email;
             $types .= "s";
         }
 
-        $sql .= "role_id = (SELECT id FROM roles WHERE name = ?) WHERE id = ?";
-        $params[] = $new_role;
-        $params[] = $user_id;
-        $types .= "si";
+        if ($new_password !== null && $new_password !== '') {
+            $new_password_hash = password_hash($new_password, PASSWORD_BCRYPT);
+            $setFields[] = "password = ?";
+            $params[] = $new_password_hash;
+            $types .= "s";
+        }
 
-        $stmt = $conn->prepare(rtrim($sql, ", "));
+        $setFields[] = "role_id = (SELECT id FROM roles WHERE name = ?)";
+        $params[] = $new_role;
+        $types .= "s";
+
+        $sql .= implode(", ", $setFields) . " WHERE id = ?";
+        $params[] = $user_id;
+        $types .= "i";
+
+        $stmt = $conn->prepare($sql);
         if ($stmt) {
             $stmt->bind_param($types, ...$params);
             if ($stmt->execute()) {
