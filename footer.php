@@ -1,7 +1,7 @@
 <div class="container-footer">
     <footer>
         <p style="font-size: 12px; font-weight: bold; color: var(--footer-text-color);">
-            A versatile RCON manager for Call of Duty 1, 2, 4, and World at War built using PHP.
+            A versatile RCON manager for Call of Duty 1, UO, 2, 4, and World at War built using PHP.
         </p>
         <p style="margin: 10px 0;">
             <a href="http://grimms3dworlds.ddns.net" style="color: var(--link-color); text-decoration: none;">
@@ -12,7 +12,7 @@
             Enhancing your gaming server management experience with intuitive tools.
         </p>
         <p class="version" style="font-size: 12px; color: var(--footer-text-color);">
-            Version 0.1.3
+            Version 0.2.1
         </p>
     </footer>
 </div>
