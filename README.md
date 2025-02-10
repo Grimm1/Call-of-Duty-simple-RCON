@@ -47,8 +47,8 @@ This tool supports multiple server management, map rotations, user management, a
    ```text
    http://your-webserver.com/utils/install.php
    ```
-4. <span style="color: red;">Delete the installer</span>::
-Delete the file utils/install.php, this is important its a potential security risk
+4.❗**Delete the installer**❗ 
+   Delete the file utils/install.php. This is important as it's a potential security risk.
 
 5. **Configure RCON Settings**:
    After installation, you can configure your RCON settings for each Call of Duty server you wish to manage. This includes adding server IPs, ports, and authentication details.
