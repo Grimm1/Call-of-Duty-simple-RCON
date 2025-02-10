@@ -6,6 +6,10 @@ function logMessage($message) {
     //error_log($message . "\n", 3, "access_log.txt");
 }
 
+// Check if install.php exists
+$installFilePath = 'utils/install.php';
+$installFileWarning = file_exists($installFilePath) ? "<p style='color: red;'>Warning: 'utils/install.php' exists. Please delete it for security reasons.</p>" : "";
+
 if ($_SERVER['REQUEST_METHOD'] == 'POST') {
     $username = $_POST['username'];
     $password = $_POST['password'];
@@ -108,6 +112,7 @@ function fetchUserPermissions($role_id) {
             if (isset($error_message)) {
                 echo "<p style='color: red;'>" . htmlspecialchars($error_message) . "</p>";
             }
+            echo $installFileWarning; // Display warning if install.php exists
             ?>
         </div>
         <main></main>
