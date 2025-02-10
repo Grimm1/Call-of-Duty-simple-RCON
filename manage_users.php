@@ -214,6 +214,25 @@ function addUser($conn, $username, $email, $password, $role, $permissions = [])
 function editUser($conn, $user_id, $new_username, $new_password, $new_email, $new_role)
 {
     try {
+        // Check if the user is currently an admin
+        $stmt = $conn->prepare("SELECT roles.name FROM users JOIN roles ON users.role_id = roles.id WHERE users.id = ?");
+        if ($stmt) {
+            $stmt->bind_param("i", $user_id);
+            $stmt->execute();
+            $result = $stmt->get_result();
+            $row = $result->fetch_assoc();
+            $stmt->close();
+
+            if ($row['name'] === 'Admin' && $new_role !== 'Admin') {
+                // Check if this is the last admin
+                if (countAdminUsers($conn) <= 1) {
+                    header('Content-Type: application/json');
+                    echo json_encode(['success' => false, 'message' => 'Cannot change the role of the last Admin account.']);
+                    exit();
+                }
+            }
+        }
+
         $sql = "UPDATE users SET ";
         $params = [];
         $types = "";
@@ -260,6 +279,18 @@ function editUser($conn, $user_id, $new_username, $new_password, $new_email, $ne
         echo json_encode(['success' => false, 'message' => 'An error occurred: ' . $e->getMessage()]);
     }
     exit();
+}
+function countAdminUsers($conn)
+{
+    $stmt = $conn->prepare("SELECT COUNT(*) as count FROM users JOIN roles ON users.role_id = roles.id WHERE roles.name = 'Admin'");
+    if ($stmt) {
+        $stmt->execute();
+        $result = $stmt->get_result();
+        $row = $result->fetch_assoc();
+        $stmt->close();
+        return $row['count'];
+    }
+    return 0;
 }
 
 function deleteUser($conn, $user_id)
@@ -313,19 +344,6 @@ function getUsers($conn)
         echo json_encode(['success' => false, 'message' => 'Failed to prepare statement for fetching users.']);
     }
     exit();
-}
-
-function countAdminUsers($conn)
-{
-    $stmt = $conn->prepare("SELECT COUNT(*) as count FROM users JOIN roles ON users.role_id = roles.id WHERE roles.name = 'Admin'");
-    if ($stmt) {
-        $stmt->execute();
-        $result = $stmt->get_result();
-        $row = $result->fetch_assoc();
-        $stmt->close();
-        return $row['count'];
-    }
-    return 0;
 }
 
 function addRole($conn, $name, $description, $permissions)
@@ -663,26 +681,28 @@ function deleteRole($conn, $role_name)
                     </form>
                 </div>
             </div>
+            <div id="confirm-dialog" style="display: none;">
+                <div id="confirm-content">
+                    <p id="confirm-message"></p>
+                    <button id="confirm-yes">Yes</button>
+                    <button id="confirm-no">No</button>
+                </div>
+            </div>
+
+            <div id="message-dialog" style="display: none;">
+                <div id="message-content">
+                    <p id="message-text"></p>
+                    <button id="message-ok">OK</button>
+                </div>
+            </div>
+
         </main>
+
         <footer>
             <?php include 'footer.php'; ?>
         </footer>
     </div>
 
-    <div id="confirm-dialog" style="display: none;">
-        <div id="confirm-content">
-            <p id="confirm-message"></p>
-            <button id="confirm-yes">Yes</button>
-            <button id="confirm-no">No</button>
-        </div>
-    </div>
-
-    <div id="message-dialog" style="display: none;">
-        <div id="message-content">
-            <p id="message-text"></p>
-            <button id="message-ok">OK</button>
-        </div>
-    </div>
 
     <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.5.1/jquery.min.js"></script>
     <script type="text/javascript" src="functions/modal.js"></script>
@@ -809,32 +829,36 @@ function deleteRole($conn, $role_name)
             });
         }
 
+
+
         function confirmDelete(userId) {
-            if (confirm('Are you sure you want to delete this user?')) {
-                var loader = document.getElementById('userLoader');
-                loader.style.display = 'inline-block';
-                $.ajax({
-                    url: 'manage_users.php',
-                    type: 'POST',
-                    data: {
-                        action: 'delete_user',
-                        user_id: userId
-                    },
-                    success: function(response) {
-                        loader.style.display = 'none';
-                        if (response.success) {
-                            displayMessage(response.message, 'success');
-                            refreshUsersTable();
-                        } else {
-                            displayMessage(response.message, 'error');
+            customConfirm("Are you sure you want to delete this user?", function(confirmed) {
+                if (confirmed) {
+                    var loader = document.getElementById('userLoader');
+                    loader.style.display = 'inline-block';
+                    $.ajax({
+                        url: 'manage_users.php',
+                        type: 'POST',
+                        data: {
+                            action: 'delete_user',
+                            user_id: userId
+                        },
+                        success: function(response) {
+                            loader.style.display = 'none';
+                            if (response.success) {
+                                displayMessage(response.message, 'success');
+                                refreshUsersTable();
+                            } else {
+                                displayMessage(response.message, 'error');
+                            }
+                        },
+                        error: function() {
+                            displayMessage('Error deleting user.', 'error');
+                            loader.style.display = 'none';
                         }
-                    },
-                    error: function() {
-                        displayMessage('Error deleting user.', 'error');
-                        loader.style.display = 'none';
-                    }
-                });
-            }
+                    });
+                }
+            });
         }
 
         document.addEventListener('DOMContentLoaded', function() {
