@@ -538,7 +538,7 @@ th {
     padding: 10px;
     margin-top: 20px;
     border-radius: 8px;
-    font-size: xx-small;
+    font-size: 12px;
     white-space: pre-wrap;
     transition: height 0.3s ease;
 }
