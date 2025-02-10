@@ -90,6 +90,8 @@ We welcome contributions! If you'd like to contribute to this project, feel free
 For support, feel free to open an issue on the [GitHub Issues page](https://github.com/Grimm1/Call-of-Duty-simple-RCON/issues), or ask questions in the repository discussions.
 
 ---
+## 🙋‍♂️ To Do
 
+Password reset functionality.
 
 Happy gaming and server management! 🎮
